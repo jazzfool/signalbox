@@ -3,35 +3,46 @@
 #include "util.h"
 #include "State.h"
 #include "Space.h"
+#include "Filter.h"
 
 #include <vector>
 #include <array>
+#include <memory>
 
 struct GLFWwindow;
 
-class Board final {
+class board final {
   public:
-    Board();
-    Board& create();
+    board();
+    board& create();
     void destroy();
 
-    Board& runLoop();
+    board& run_loop();
 
-    Space makeSpace(const Vector2<uint32>& textSize);
+    space make_space(const vector2<uint32>& textSize);
 
-    const BoardConfig& getConfig() const;
+    const board_config& config() const;
+
+    template<typename T>
+    board& filter(filter<T, stereo>&& filter) {
+        auto fwd = filter_fwd<T, stereo>{std::move(filter)};
+        m_filters.push_back(std::move(std::make_unique<decltype(fwd)>(fwd)));
+        return *this;
+    }
 
   private:
-    void resetLayout();
+    void reset_layout();
 
-    BoardConfig config;
-    GLFWwindow* window;
-    NVGcontext* nvg;
+    board_config m_config;
+    GLFWwindow* m_window;
+    NVGcontext* m_nvg;
 
-    float32 dpiScale;
-    Rect<float32> layoutRect;
-    Vector2<float32> layoutCursor;
-    float32 maxLayoutHeight;
+    float32 m_dpi_scale;
+    rect2<float32> m_layout_rect;
+    vector2<float32> m_layout_cursor;
+    float32 m_max_layout_height;
 
-    InputState input;
+    input_state m_input;
+
+    std::vector<std::unique_ptr<filter_base<stereo>>> m_filters;
 };

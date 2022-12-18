@@ -8,23 +8,50 @@
 struct GLFWwindow;
 struct NVGcontext;
 
-struct Space final {
-    GLFWwindow* window;
-    NVGcontext* nvg;
-    InputState input;
-
-    Vector2<float32> layoutCursor;
-    Rect<float32> rect;
-    NVGcolor color;
-    BoardConfig config;
+class space final {
+  public:
+    space(GLFWwindow* window, NVGcontext* nvg, input_state input, board_config config, rect2<float32> rect);
 
     void begin();
     void end();
 
+    rect2<float32> measure(const std::string& s);
     void write(const std::string& s);
-    bool writeButton(const std::string& s);
-    void nextLine();
-    Rect<float32> drawBlock(uint32 lines);
+    bool write_button(const std::string& s);
+    bool write_hover(const std::string& s, NVGcolor bg, NVGcolor fg);
+    void next_line();
+    rect2<float32> draw_block(uint32 lines);
 
-    float32 remainingHeight() const;
+    float32 remaining_height() const;
+
+    GLFWwindow* window() const;
+    NVGcontext* nvg() const;
+    const input_state& input() const;
+    const board_config& config() const;
+
+    rect2<float32> rect() const;
+    void set_rtl(bool rtl);
+    bool rtl() const;
+
+    void set_color(NVGcolor color);
+    NVGcolor color() const;
+    void set_bold(bool bold);
+
+  private:
+    float32 advance_layout_x(float32 x);
+    const char* font_face() const;
+
+    GLFWwindow* m_window;
+    NVGcontext* m_nvg;
+    input_state m_input;
+    board_config m_config;
+
+    vector2<float32> m_layout_cursor;
+    float32 m_available_width;
+    bool m_rtl;
+    rect2<float32> m_outer_rect;
+    rect2<float32> m_rect;
+
+    NVGcolor m_color;
+    bool m_bold;
 };

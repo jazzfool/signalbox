@@ -11,11 +11,11 @@
 
 #include <spdlog/spdlog.h>
 
-Board::Board() {
-    maxLayoutHeight = 0.f;
+board::board() {
+    m_max_layout_height = 0.f;
 }
 
-Board& Board::create() {
+board& board::create() {
     glfwInit();
 
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
@@ -31,154 +31,139 @@ Board& Board::create() {
     glfwWindowHint(GLFW_STENCIL_BITS, 8);
     glfwWindowHint(GLFW_DEPTH_BITS, 24);
 
-    window = glfwCreateWindow(400, 300, "Signalbox", nullptr, nullptr);
-    sb_ASSERT(window);
+    m_window = glfwCreateWindow(400, 300, "Signalbox", nullptr, nullptr);
+    sb_ASSERT(m_window);
 
-    glfwSetWindowUserPointer(window, this);
+    glfwSetWindowUserPointer(m_window, this);
 
-    glfwGetWindowContentScale(window, &dpiScale, nullptr);
-    glfwSetWindowContentScaleCallback(window, [](GLFWwindow* window, float32 xScale, float32 yScale) {
-        auto& board = *reinterpret_cast<Board*>(glfwGetWindowUserPointer(window));
-        board.dpiScale = xScale;
+    glfwGetWindowContentScale(m_window, &m_dpi_scale, nullptr);
+    glfwSetWindowContentScaleCallback(m_window, [](GLFWwindow* m_window, float32 xScale, float32 yScale) {
+        auto& b = *reinterpret_cast<board*>(glfwGetWindowUserPointer(m_window));
+        b.m_dpi_scale = xScale;
     });
 
-    glfwSetCursorPosCallback(window, [](GLFWwindow* window, float64 x, float64 y) {
-        auto& board = *reinterpret_cast<Board*>(glfwGetWindowUserPointer(window));
-        board.input.cursorPos =
-            Vector2<float32>{static_cast<float32>(x), static_cast<float32>(y)} / board.dpiScale;
+    glfwSetCursorPosCallback(m_window, [](GLFWwindow* m_window, float64 x, float64 y) {
+        auto& b = *reinterpret_cast<board*>(glfwGetWindowUserPointer(m_window));
+        b.m_input.cursor_pos =
+            vector2<float32>{static_cast<float32>(x), static_cast<float32>(y)} / b.m_dpi_scale;
     });
 
-    glfwSetMouseButtonCallback(window, [](GLFWwindow* window, int32 button, int32 action, int32 mods) {
-        auto& board = *reinterpret_cast<Board*>(glfwGetWindowUserPointer(window));
+    glfwSetMouseButtonCallback(m_window, [](GLFWwindow* m_window, int32 button, int32 action, int32 mods) {
+        auto& b = *reinterpret_cast<board*>(glfwGetWindowUserPointer(m_window));
         if (action == GLFW_PRESS)
-            board.input.mouseJustPressed[button] = true;
+            b.m_input.mouse_just_pressed[button] = true;
     });
 
-    glfwMakeContextCurrent(window);
+    glfwSetScrollCallback(m_window, [](GLFWwindow* m_window, float64 xScroll, float64 yScroll) {
+        auto& b = *reinterpret_cast<board*>(glfwGetWindowUserPointer(m_window));
+        b.m_input.scroll_wheel = static_cast<float32>(yScroll);
+    });
+
+    glfwMakeContextCurrent(m_window);
 
     glewExperimental = GL_TRUE;
     glewInit();
 
-    nvg = nvgCreateGL3(NVG_STENCIL_STROKES | NVG_ANTIALIAS);
+    m_nvg = nvgCreateGL3(NVG_STENCIL_STROKES | NVG_ANTIALIAS);
 
-    config.bg = nvgRGB(0, 0, 0);
-    config.fg = nvgRGB(255, 255, 255);
-    config.frameColor = nvgRGB(150, 150, 150);
+    m_config.font_size = 14.f;
+    nvgFontSize(m_nvg, m_config.font_size);
 
-    config.fontSize = 14.f;
+    nvgCreateFont(m_nvg, "mono", "data/CourierPrime-Regular.ttf");
+    nvgCreateFont(m_nvg, "monoB", "data/CourierPrime-Bold.ttf");
 
-    nvgFontSize(nvg, config.fontSize);
-    nvgCreateFont(nvg, "mono", "data/RobotoMono-Regular.ttf");
-    nvgFontFace(nvg, "mono");
+    nvgFontFace(m_nvg, "mono");
 
-    nvgTextMetrics(nvg, &config.ascender, nullptr, &config.lineHeight);
-    config.lineHeight *= 1.2f;
+    nvgTextMetrics(m_nvg, &m_config.ascender, nullptr, &m_config.line_height);
+    m_config.line_height *= 1.2f;
 
     float32 bounds[4];
-    config.charWidth = nvgTextBounds(nvg, 0.f, 0.f, "A", nullptr, bounds);
+    m_config.char_width = nvgTextBounds(m_nvg, 0.f, 0.f, "A", nullptr, bounds);
 
-    config.outerPadding = 10.f;
-    config.innerPadding = 5.f;
+    m_config.outer_padding = 10.f;
+    m_config.inner_padding = 5.f;
 
     return *this;
 }
 
-void Board::destroy() {
-    nvgDeleteGL3(nvg);
-    glfwDestroyWindow(window);
+void board::destroy() {
+    nvgDeleteGL3(m_nvg);
+    glfwDestroyWindow(m_window);
     glfwTerminate();
 }
 
-Board& Board::runLoop() {
-    while (!glfwWindowShouldClose(window)) {
-        float32 xScale, yScale;
-        glfwGetWindowContentScale(window, &xScale, &yScale);
+board& board::run_loop() {
+    while (!glfwWindowShouldClose(m_window)) {
+        float32 x_scale, y_scale;
+        glfwGetWindowContentScale(m_window, &x_scale, &y_scale);
 
         int32 width, height;
-        glfwGetWindowSize(window, &width, &height);
+        glfwGetWindowSize(m_window, &width, &height);
 
-        int32 fbWidth, fbHeight;
-        glfwGetFramebufferSize(window, &fbWidth, &fbHeight);
+        int32 fb_width, fb_height;
+        glfwGetFramebufferSize(m_window, &fb_width, &fb_height);
 
-        glViewport(0, 0, fbWidth, fbHeight);
+        glViewport(0, 0, fb_width, fb_height);
         glClearColor(0.f, 0.f, 0.f, 1.f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
-        nvgBeginFrame(nvg, width, height, dpiScale);
-        nvgScale(nvg, xScale, yScale);
+        nvgBeginFrame(m_nvg, width, height, m_dpi_scale);
+        nvgScale(m_nvg, x_scale, y_scale);
 
-        resetLayout();
+        reset_layout();
 
-        auto space = makeSpace({50, 5});
-        space.begin();
-        space.write("Click this button: ");
-        if (space.writeButton("This one"))
-            spdlog::info("click!");
-        space.nextLine();
-        space.writeButton("...or this one");
-        space.end();
+        for (auto& f : m_filters) {
+            auto space = make_space(f->space_size());
+            space.begin();
+            f->draw_space(space);
+            space.end();
+        }
 
-        auto s2 = makeSpace({50, 5});
-        s2.begin();
-        s2.end();
+        nvgEndFrame(m_nvg);
 
-        auto s3 = makeSpace({50, 5});
-        s3.begin();
-        s3.end();
+        m_input.mouse_just_pressed = {false, false, false};
+        m_input.scroll_wheel = 0.f;
 
-        nvgEndFrame(nvg);
-
-        input.mouseJustPressed = {false, false, false};
-
-        glfwSwapBuffers(window);
+        glfwSwapBuffers(m_window);
         glfwPollEvents();
     }
 
     return *this;
 }
 
-const BoardConfig& Board::getConfig() const {
-    return config;
+const board_config& board::config() const {
+    return m_config;
 }
 
-Space Board::makeSpace(const Vector2<uint32>& textSize) {
-    const auto size = Vector2<float32>{
-        static_cast<float32>(textSize.x) * config.charWidth,
-        static_cast<float32>(textSize.y) * config.lineHeight,
+space board::make_space(const vector2<uint32>& textSize) {
+    const auto size = vector2<float32>{
+        static_cast<float32>(textSize.x) * m_config.char_width + 2.f * m_config.inner_padding,
+        static_cast<float32>(textSize.y) * m_config.line_height + 2.f * m_config.inner_padding,
     };
 
-    if (size.x > layoutRect.size.x - layoutCursor.x) {
-        layoutCursor.x = layoutRect.pos.x;
-        layoutCursor.y += maxLayoutHeight + config.outerPadding;
-        maxLayoutHeight = 0.f;
+    if (size.x > m_layout_rect.size.x - m_layout_cursor.x) {
+        m_layout_cursor.x = m_layout_rect.pos.x;
+        m_layout_cursor.y += m_max_layout_height + m_config.outer_padding;
+        m_max_layout_height = 0.f;
     }
 
-    maxLayoutHeight = std::max(maxLayoutHeight, size.y);
-    const auto spaceRect = Rect<float32>{layoutCursor, size};
-    layoutCursor.x += size.x + config.outerPadding;
+    m_max_layout_height = std::max(m_max_layout_height, size.y);
+    const auto space_rect = rect2<float32>{m_layout_cursor, size};
+    m_layout_cursor.x += size.x + m_config.outer_padding;
 
-    Space space;
-
-    space.window = window;
-    space.nvg = nvg;
-    space.input = input;
-
-    space.config = getConfig();
-    space.rect = spaceRect;
-
-    return space;
+    return space{m_window, m_nvg, m_input, m_config, space_rect};
 }
 
-void Board::resetLayout() {
+void board::reset_layout() {
     int32 width, height;
-    glfwGetWindowSize(window, &width, &height);
-    layoutRect =
-        Rect<float32>{
+    glfwGetWindowSize(m_window, &width, &height);
+    m_layout_rect =
+        rect2<float32>{
             {0.f, 0.f},
-            Vector2<float32>{static_cast<float32>(width), static_cast<float32>(height)} / dpiScale,
+            vector2<float32>{static_cast<float32>(width), static_cast<float32>(height)} / m_dpi_scale,
         }
-            .inflate(-config.outerPadding);
+            .inflate(-m_config.outer_padding);
 
-    layoutCursor = layoutRect.pos;
-    maxLayoutHeight = 0.f;
+    m_layout_cursor = m_layout_rect.pos;
+    m_max_layout_height = 0.f;
 }
