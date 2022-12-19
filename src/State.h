@@ -2,8 +2,12 @@
 
 #include "util.h"
 
+#define GLFW_INCLUDE_NONE
+#include <GLFW/glfw3.h>
 #include <nanovg.h>
 #include <array>
+#include <optional>
+#include <unordered_map>
 
 struct board_colors final {
     NVGcolor bg;
@@ -42,7 +46,13 @@ struct board_config final {
 };
 
 struct input_state final {
+    std::array<bool, GLFW_KEY_LAST> keys_just_pressed;
     vector2<float32> cursor_pos = {0.f, 0.f};
     std::array<bool, 3> mouse_just_pressed = {false, false, false};
     float32 scroll_wheel = 0.f;
+    std::optional<char32> text = {};
+
+    input_state() {
+        keys_just_pressed.fill(false);
+    }
 };

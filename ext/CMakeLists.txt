@@ -31,11 +31,19 @@ FetchContent_Declare(
 FetchContent_Declare(
     glm
     GIT_REPOSITORY https://github.com/g-truc/glm.git
-    GIT_TAG bf71a834948186f4097caa076cd2663c69a10e1e # 0.9.9.8
+    GIT_TAG bf71a834948186f4097caa076cd2663c69a10e1e # v0.9.9.8
 )
 
-FetchContent_MakeAvailable(glfw nanovg spdlog glew glm)
+FetchContent_Declare(
+    freetype
+    GIT_REPOSITORY https://github.com/freetype/freetype.git
+    GIT_TAG e8ebfe988b5f57bfb9a3ecb13c70d9791bce9ecf # v2.12.1
+)
+
+FetchContent_MakeAvailable(glfw nanovg spdlog glew glm freetype)
 
 add_library(nanovg)
 target_sources(nanovg PRIVATE ${CMAKE_BINARY_DIR}/_deps/nanovg-src/src/nanovg.c)
 target_include_directories(nanovg PUBLIC ${CMAKE_BINARY_DIR}/_deps/nanovg-src/src)
+target_compile_definitions(nanovg PRIVATE FONS_USE_FREETYPE)
+target_link_libraries(nanovg PRIVATE freetype)

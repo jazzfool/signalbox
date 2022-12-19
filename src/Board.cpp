@@ -1,4 +1,4 @@
-#include "Board.h"
+#include "board.h"
 
 #include "util.h"
 
@@ -12,6 +12,7 @@
 #include <spdlog/spdlog.h>
 
 board::board() {
+    m_frame0 = true;
     m_max_layout_height = 0.f;
 }
 
@@ -42,21 +43,33 @@ board& board::create() {
         b.m_dpi_scale = xScale;
     });
 
-    glfwSetCursorPosCallback(m_window, [](GLFWwindow* m_window, float64 x, float64 y) {
-        auto& b = *reinterpret_cast<board*>(glfwGetWindowUserPointer(m_window));
+    glfwSetCursorPosCallback(m_window, [](GLFWwindow* window, float64 x, float64 y) {
+        auto& b = *reinterpret_cast<board*>(glfwGetWindowUserPointer(window));
         b.m_input.cursor_pos =
             vector2<float32>{static_cast<float32>(x), static_cast<float32>(y)} / b.m_dpi_scale;
     });
 
-    glfwSetMouseButtonCallback(m_window, [](GLFWwindow* m_window, int32 button, int32 action, int32 mods) {
-        auto& b = *reinterpret_cast<board*>(glfwGetWindowUserPointer(m_window));
+    glfwSetMouseButtonCallback(m_window, [](GLFWwindow* window, int32 button, int32 action, int32 mods) {
+        auto& b = *reinterpret_cast<board*>(glfwGetWindowUserPointer(window));
         if (action == GLFW_PRESS)
             b.m_input.mouse_just_pressed[button] = true;
     });
 
-    glfwSetScrollCallback(m_window, [](GLFWwindow* m_window, float64 xScroll, float64 yScroll) {
-        auto& b = *reinterpret_cast<board*>(glfwGetWindowUserPointer(m_window));
+    glfwSetScrollCallback(m_window, [](GLFWwindow* window, float64 xScroll, float64 yScroll) {
+        auto& b = *reinterpret_cast<board*>(glfwGetWindowUserPointer(window));
         b.m_input.scroll_wheel = static_cast<float32>(yScroll);
+    });
+
+    glfwSetCharCallback(m_window, [](GLFWwindow* window, uint32 text) {
+        auto& b = *reinterpret_cast<board*>(glfwGetWindowUserPointer(window));
+        b.m_input.text = static_cast<char32>(text);
+    });
+
+    glfwSetKeyCallback(m_window, [](GLFWwindow* window, int32 key, int32 scancode, int32 action, int32 mods) {
+        auto& b = *reinterpret_cast<board*>(glfwGetWindowUserPointer(window));
+        if (action == GLFW_PRESS) {
+            b.m_input.keys_just_pressed[key] = true;
+        }
     });
 
     glfwMakeContextCurrent(m_window);
@@ -67,18 +80,16 @@ board& board::create() {
     m_nvg = nvgCreateGL3(NVG_STENCIL_STROKES | NVG_ANTIALIAS);
 
     m_config.font_size = 14.f;
-    nvgFontSize(m_nvg, m_config.font_size);
 
     nvgCreateFont(m_nvg, "mono", "data/CourierPrime-Regular.ttf");
     nvgCreateFont(m_nvg, "monoB", "data/CourierPrime-Bold.ttf");
 
     nvgFontFace(m_nvg, "mono");
+    nvgFontSize(m_nvg, m_config.font_size);
+    nvgTextAlign(m_nvg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
 
     nvgTextMetrics(m_nvg, &m_config.ascender, nullptr, &m_config.line_height);
     m_config.line_height *= 1.2f;
-
-    float32 bounds[4];
-    m_config.char_width = nvgTextBounds(m_nvg, 0.f, 0.f, "A", nullptr, bounds);
 
     m_config.outer_padding = 10.f;
     m_config.inner_padding = 5.f;
@@ -110,6 +121,14 @@ board& board::run_loop() {
         nvgBeginFrame(m_nvg, width, height, m_dpi_scale);
         nvgScale(m_nvg, x_scale, y_scale);
 
+        if (m_frame0) {
+            m_frame0 = false;
+            nvgFontFace(m_nvg, "mono");
+            nvgFontSize(m_nvg, m_config.font_size);
+            nvgTextAlign(m_nvg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
+            m_config.char_width = nvgTextBounds(m_nvg, 0.f, 0.f, " ", nullptr, nullptr);
+        }
+
         reset_layout();
 
         for (auto& f : m_filters) {
@@ -121,8 +140,10 @@ board& board::run_loop() {
 
         nvgEndFrame(m_nvg);
 
+        m_input.keys_just_pressed.fill(false);
         m_input.mouse_just_pressed = {false, false, false};
         m_input.scroll_wheel = 0.f;
+        m_input.text.reset();
 
         glfwSwapBuffers(m_window);
         glfwPollEvents();
@@ -151,7 +172,7 @@ space board::make_space(const vector2<uint32>& textSize) {
     const auto space_rect = rect2<float32>{m_layout_cursor, size};
     m_layout_cursor.x += size.x + m_config.outer_padding;
 
-    return space{m_window, m_nvg, m_input, m_config, space_rect};
+    return space{m_window, m_nvg, m_focus, m_input, m_config, space_rect};
 }
 
 void board::reset_layout() {

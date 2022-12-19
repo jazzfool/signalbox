@@ -1,11 +1,12 @@
-#include "Board.h"
-#include "Widget.h"
+#include "board.h"
+#include "widget.h"
 
 #include <spdlog/fmt/fmt.h>
 
 int main() {
     struct filter_data0 {
         uint8 chan1;
+        std::string path;
     };
 
     struct filter_data1 {
@@ -16,10 +17,10 @@ int main() {
     board()
         .create()
         .filter(filter<filter_data0, stereo>{
-            .data = {0},
+            .data = {0, "C:/"},
             .size =
-                [](auto&) {
-                    return vector2<uint32>{30, 3};
+                [](auto& data) {
+                    return vector2<uint32>{std::max<uint32>(30, data.path.size() + 6), 3};
                 },
             .draw =
                 [](auto& data, auto& s) {
@@ -31,13 +32,13 @@ int main() {
                     s.set_rtl(false);
 
                     s.next_line();
-                    s.write("File: ");
-                    s.write("test.wav");
+                    s.write("Path: ");
+                    ui_text_in(s, data.path, 2);
 
                     s.next_line();
                     s.set_rtl(true);
                     ui_chan_sel(s, data.chan1);
-                    s.write("Channel A OUT: ");
+                    s.write("Channel A OUT ");
                 },
             .filter = [](auto&, auto x) -> stereo { return {.l = x.l, .r = x.r}; },
         })
@@ -57,18 +58,18 @@ int main() {
                     s.set_rtl(false);
 
                     s.next_line();
-                    s.write("Channel A IN: ");
                     ui_chan_sel(s, data.chan1);
+                    s.write(" Channel A IN");
 
                     s.next_line();
                     s.set_rtl(true);
                     ui_chan_sel(s, data.chan2);
-                    s.write("Channel A OUT: ");
+                    s.write("Channel A OUT ");
 
                     s.set_rtl(false);
                     s.next_line();
                     s.write("Frequency: ");
-                    ui_float_ran(s, -2.f, 2.f, 0.1f, data.freq);
+                    ui_float(s, 0.1f, data.freq);
 
                     ui_viz_sine(s, nvgRGB(255, 0, 0), 3, 100, 1.f, data.freq);
                 },

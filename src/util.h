@@ -20,6 +20,10 @@ using int16 = int16_t;
 using int32 = int32_t;
 using int64 = int64_t;
 
+using char8 = char8_t;
+using char16 = char16_t;
+using char32 = char32_t;
+
 using float32 = float;
 using float64 = double;
 

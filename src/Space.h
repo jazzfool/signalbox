@@ -1,7 +1,7 @@
 #pragma once
 
 #include "util.h"
-#include "State.h"
+#include "state.h"
 
 #include <string>
 
@@ -10,7 +10,7 @@ struct NVGcontext;
 
 class space final {
   public:
-    space(GLFWwindow* window, NVGcontext* nvg, input_state input, board_config config, rect2<float32> rect);
+    space(GLFWwindow* window, NVGcontext* nvg, void*& focus, input_state input, board_config config, rect2<float32> rect);
 
     void begin();
     void end();
@@ -36,6 +36,8 @@ class space final {
     void set_color(NVGcolor color);
     NVGcolor color() const;
     void set_bold(bool bold);
+
+    void*& focus;
 
   private:
     float32 advance_layout_x(float32 x);

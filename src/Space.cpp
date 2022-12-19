@@ -1,12 +1,13 @@
-#include "Space.h"
+#include "space.h"
 
 #include <nanovg.h>
 #include <GLFW/glfw3.h>
 #include <glm/mat3x3.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
-space::space(GLFWwindow* window, NVGcontext* nvg, input_state input, board_config config, rect2<float32> rect)
-    : m_window{window}, m_nvg{nvg}, m_input{input}, m_config{config}, m_outer_rect{rect} {
+space::space(GLFWwindow* window, NVGcontext* nvg, void*& focus, input_state input, board_config config,
+             rect2<float32> rect)
+    : focus{focus}, m_window{window}, m_nvg{nvg}, m_input{input}, m_config{config}, m_outer_rect{rect} {
     m_rect = m_outer_rect.inflate(-m_config.inner_padding);
     m_layout_cursor = m_rect.pos;
     m_available_width = m_rect.size.x;
@@ -43,14 +44,15 @@ rect2<float32> space::measure(const std::string& s) {
     nvgFontFace(m_nvg, "mono");
     nvgFontSize(m_nvg, m_config.font_size);
     nvgTextAlign(m_nvg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
+    nvgTextLetterSpacing(m_nvg, 0.f);
 
     float32 bounds[4];
-    const float32 advance = nvgTextBounds(m_nvg, 0.f, 0.f, s.c_str(), nullptr, bounds);
+    const auto advance = nvgTextBounds(m_nvg, 0.f, 0.f, s.c_str(), nullptr, bounds);
 
     const auto x = m_layout_cursor.x - (float32)m_rtl * advance;
     const auto y = m_layout_cursor.y + m_config.line_height / 2.f;
 
-    auto bounds_rect = rect2<float32>{{bounds[0], bounds[1]}, {bounds[2] - bounds[0], bounds[3] - bounds[1]}};
+    auto bounds_rect = rect2<float32>{{bounds[0], bounds[1]}, {advance, m_config.line_height}};
     bounds_rect = bounds_rect.translate({x, y});
 
     return bounds_rect;
@@ -60,15 +62,16 @@ void space::write(const std::string& s) {
     if (s.empty())
         return;
 
-    float32 bounds[4];
-    const float32 advance = nvgTextBounds(m_nvg, 0.f, 0.f, s.c_str(), nullptr, bounds);
-
-    const float32 x = advance_layout_x(advance);
-    const float32 y = m_layout_cursor.y + m_config.line_height / 2.f;
-
     nvgFontFace(m_nvg, font_face());
     nvgFontSize(m_nvg, m_config.font_size);
     nvgTextAlign(m_nvg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
+    nvgTextLetterSpacing(m_nvg, 0.f);
+
+    float32 bounds[4];
+    const auto advance = nvgTextBounds(m_nvg, 0.f, 0.f, s.c_str(), nullptr, bounds);
+
+    const auto x = advance_layout_x(advance);
+    const auto y = m_layout_cursor.y + m_config.line_height / 2.f;
 
     nvgFillColor(m_nvg, m_color);
     nvgText(m_nvg, x, y, s.c_str(), nullptr);
@@ -82,21 +85,21 @@ bool space::write_hover(const std::string& s, NVGcolor bg, NVGcolor fg) {
     if (s.empty())
         return false;
 
+    nvgFontFace(m_nvg, font_face());
+    nvgFontSize(m_nvg, m_config.font_size);
+    nvgTextAlign(m_nvg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
+    nvgTextLetterSpacing(m_nvg, 0.f);
+
     float32 bounds[4];
-    const float32 advance = nvgTextBounds(m_nvg, 0.f, 0.f, s.c_str(), nullptr, bounds);
+    const auto advance = nvgTextBounds(m_nvg, 0.f, 0.f, s.c_str(), nullptr, bounds);
 
-    const float32 x = advance_layout_x(advance);
-    const float32 y = m_layout_cursor.y + m_config.line_height / 2.f;
+    const auto x = advance_layout_x(advance);
+    const auto y = m_layout_cursor.y + m_config.line_height / 2.f;
 
-    auto bounds_rect = rect2<float32>{{bounds[0], bounds[1]}, {bounds[2] - bounds[0], bounds[3] - bounds[1]}};
+    auto bounds_rect = rect2<float32>{{bounds[0], bounds[1]}, {advance, m_config.line_height}};
     bounds_rect = bounds_rect.translate({x, y});
 
     const auto mouse_over = bounds_rect.contains(m_input.cursor_pos);
-    const auto font = font_face();
-
-    nvgFontFace(m_nvg, font);
-    nvgFontSize(m_nvg, m_config.font_size);
-    nvgTextAlign(m_nvg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
 
     if (mouse_over) {
         nvgBeginPath(m_nvg);

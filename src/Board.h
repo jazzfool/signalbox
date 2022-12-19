@@ -1,9 +1,9 @@
 #pragma once
 
 #include "util.h"
-#include "State.h"
-#include "Space.h"
-#include "Filter.h"
+#include "state.h"
+#include "space.h"
+#include "filter.h"
 
 #include <vector>
 #include <array>
@@ -36,6 +36,7 @@ class board final {
     board_config m_config;
     GLFWwindow* m_window;
     NVGcontext* m_nvg;
+    bool m_frame0;
 
     float32 m_dpi_scale;
     rect2<float32> m_layout_rect;
@@ -43,6 +44,7 @@ class board final {
     float32 m_max_layout_height;
 
     input_state m_input;
+    void* m_focus;
 
     std::vector<std::unique_ptr<filter_base<stereo>>> m_filters;
 };

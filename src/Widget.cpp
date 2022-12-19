@@ -1,12 +1,13 @@
-﻿#include "Widget.h"
+﻿#include "widget.h"
 
-#include "Space.h"
+#include "space.h"
 
 #include <sstream>
 #include <iomanip>
 #include <spdlog/fmt/fmt.h>
 #include <GLFW/glfw3.h>
 #include <numbers>
+#include <codecvt>
 
 void ui_chan_btn(space& space, uint8& chan, bool inc) {
     space.set_color(space.config().colors.blue);
@@ -58,6 +59,44 @@ void ui_float_ran(space& space, float32 min, float32 max, float32 step, float32&
     space.set_color(space.config().colors.fg);
 }
 
+void ui_float(space& space, float32 step, float32& x) {
+    ui_float_ran(space, -INFINITY, INFINITY, step, x);
+}
+
+void ui_text_in(space& space, std::string& s, uint32 min_len) {
+    const auto str = s;
+    
+    const auto bounds = space.measure(str);
+
+    const auto nvg = space.nvg();
+    if (space.focus == &s) {
+        nvgBeginPath(nvg);
+        nvgRoundedRect(nvg, bounds.pos.x, bounds.pos.y, bounds.size.x, bounds.size.y, 2.f);
+        nvgFillColor(nvg, nvgRGB(30, 30, 30));
+        nvgFill(nvg);
+    }
+
+    const auto hover = space.write_hover(str, space.config().colors.hover, space.config().colors.fg);
+
+    if (space.focus == &s) {
+        if (space.input().text) {
+            std::wstring_convert<std::codecvt_utf8<char32>, char32> cvt;
+            s += cvt.to_bytes(*space.input().text);
+        }
+
+        if (!s.empty() && space.input().keys_just_pressed[GLFW_KEY_BACKSPACE]) {
+            s.pop_back();
+        }
+
+        if (space.input().keys_just_pressed[GLFW_KEY_ENTER]) {
+            space.focus = nullptr;
+        }
+    } else if (hover && space.input().mouse_just_pressed[0]) {
+        space.focus = &s;
+        s.clear();
+    }
+}
+
 void draw_grid(space& space, NVGcolor color, const rect2<float32>& rect, float32 spacing) {
     const auto nvg = space.nvg();
 
@@ -84,8 +123,7 @@ void draw_grid(space& space, NVGcolor color, const rect2<float32>& rect, float32
     nvgRestore(nvg);
 }
 
-void ui_viz_sine(space& space,  NVGcolor stroke, uint32 lines, uint32 samples, float32 ampl,
-                 float32 freq) {
+void ui_viz_sine(space& space, NVGcolor stroke, uint32 lines, uint32 samples, float32 ampl, float32 freq) {
     const auto nvg = space.nvg();
     const auto outer_rect = space.draw_block(lines);
 
