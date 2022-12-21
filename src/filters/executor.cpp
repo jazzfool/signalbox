@@ -34,7 +34,7 @@ void filter_executor::data_callback(void* output, const void* input, uint32 fram
 
     channels chans;
     chans.frame_count = frame_count;
-    auto base_chan = samples{};
+    auto base_chan = channel{};
     base_chan.samples = std::vector(frame_count, 0.f), base_chan.sample_rate = 48000;
     for (auto& chan : chans.chans) {
         chan = base_chan;

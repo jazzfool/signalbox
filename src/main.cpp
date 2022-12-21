@@ -22,13 +22,19 @@ int main() {
         std::array<sample, 480> samples;
     };
 
+    struct filter2_data {
+        uint8 chan1;
+        uint8 chan2;
+        uint8 chan3;
+    };
+
     board{}
         .create()
         .add_filter(filter<filter0_data, none>{
             .data = {0, 0.1f, 1.f},
             .size =
                 [](auto&) {
-                    return vector2<uint32>{30, 8};
+                    return vector2<uint32>{30, 7};
                 },
             .draw =
                 [](auto& data, auto& s) {
@@ -102,6 +108,45 @@ int main() {
                 auto out = filter1_out{};
                 std::copy_n(chans.chans[data.chan1].samples.begin(), 480, out.samples.begin());
                 return out;
+            },
+        })
+        .add_filter(filter<filter2_data, none>{
+            .data = {0, 0, 1},
+            .size =
+                [](auto&) {
+                    return vector2<uint32>{30, 4};
+                },
+            .draw =
+                [](auto& data, auto& s) {
+                    s.set_bold(true);
+                    s.write("003");
+                    s.set_rtl(true);
+                    s.write("SPLIT");
+                    s.set_bold(false);
+                    s.set_rtl(false);
+
+                    s.next_line();
+                    ui_chan_sel(s, data.chan1);
+                    s.write(" Channel A IN");
+
+                    s.next_line();
+                    s.set_rtl(true);
+                    ui_chan_sel(s, data.chan2);
+                    s.write("Channel B OUT ");
+
+                    s.next_line();
+                    ui_chan_sel(s, data.chan3);
+                    s.write("Channel C OUT ");
+                },
+            .update = [](auto& data, const auto& in) {},
+            .apply = [](const auto& data, auto& chans) -> none {
+                const auto in = chans.chans[data.chan1];
+                for (auto chan : {data.chan2, data.chan3}) {
+                    if (chan == data.chan1)
+                        continue;
+                    chans.chans[chan] = in;
+                }
+                return {};
             },
         })
         .run_loop()
