@@ -40,10 +40,25 @@ FetchContent_Declare(
     GIT_TAG e8ebfe988b5f57bfb9a3ecb13c70d9791bce9ecf # v2.12.1
 )
 
-FetchContent_MakeAvailable(glfw nanovg spdlog glew glm freetype)
+FetchContent_Declare(
+    miniaudio
+    GIT_REPOSITORY https://github.com/mackron/miniaudio.git
+    GIT_TAG c153a947919808419b0bf3f56b6f2ee606d6c5f4 # latest
+)
+
+FetchContent_Declare(
+    SPSCQueue
+    GIT_REPOSITORY https://github.com/rigtorp/SPSCQueue.git
+    GIT_TAG 565a5149d54930463d58cb0f69b978d439555e66 # v1.1
+)
+
+FetchContent_MakeAvailable(glfw nanovg spdlog glew glm freetype miniaudio SPSCQueue)
 
 add_library(nanovg)
 target_sources(nanovg PRIVATE ${CMAKE_BINARY_DIR}/_deps/nanovg-src/src/nanovg.c)
 target_include_directories(nanovg PUBLIC ${CMAKE_BINARY_DIR}/_deps/nanovg-src/src)
 target_compile_definitions(nanovg PRIVATE FONS_USE_FREETYPE)
 target_link_libraries(nanovg PRIVATE freetype)
+
+add_library(miniaudio INTERFACE)
+target_include_directories(miniaudio INTERFACE ${CMAKE_BINARY_DIR}/_deps/miniaudio-src)

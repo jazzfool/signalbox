@@ -4,6 +4,7 @@
 #include "state.h"
 #include "space.h"
 #include "filter.h"
+#include "filters/executor.h"
 
 #include <vector>
 #include <array>
@@ -19,14 +20,15 @@ class board final {
 
     board& run_loop();
 
-    space make_space(const vector2<uint32>& textSize);
+    space make_space(const vector2<uint32>& text_size);
+    space make_spacef(const vector2<float32>& size);
 
     const board_config& config() const;
 
-    template<typename T>
-    board& filter(filter<T, stereo>&& filter) {
-        auto fwd = filter_fwd<T, stereo>{std::move(filter)};
-        m_filters.push_back(std::move(std::make_unique<decltype(fwd)>(fwd)));
+    template <typename TDataIn, typename TDataOut>
+    board& add_filter(filter<TDataIn, TDataOut>&& filter) {
+        auto lock = std::lock_guard{m_filters.mut};
+        m_filters.filters.push_back(std::make_unique<filter_fwd<TDataIn, TDataOut>>(std::move(filter)));
         return *this;
     }
 
@@ -46,5 +48,6 @@ class board final {
     input_state m_input;
     void* m_focus;
 
-    std::vector<std::unique_ptr<filter_base<stereo>>> m_filters;
+    filter_executor m_filter_executor;
+    filter_list m_filters;
 };

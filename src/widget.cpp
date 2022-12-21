@@ -1,6 +1,7 @@
 ﻿#include "widget.h"
 
 #include "space.h"
+#include "filters/sample.h"
 
 #include <sstream>
 #include <iomanip>
@@ -25,7 +26,7 @@ void ui_chan_sel(space& space, uint8& chan) {
     const auto s = fmt::format("{:02}", chan);
     if (space.write_hover(s, space.config().colors.hover, space.color())) {
         const auto scroll = static_cast<uint8>(std::abs(space.input().scroll_wheel));
-        if (space.input().scroll_wheel > 0.f && chan < 99)
+        if (space.input().scroll_wheel > 0.f && chan < MAX_CHANNELS)
             chan += scroll;
         else if (space.input().scroll_wheel < 0.f && chan > 0)
             chan -= scroll;
@@ -49,7 +50,7 @@ void ui_float_ran(space& space, float32 min, float32 max, float32 step, float32&
     ui_float_btn(space, x, min, max, step, rtl);
 
     space.set_color(space.config().colors.fg);
-    const auto prec = fmt::format("{:g}", step - std::round(step)).size() - 2;
+    const auto prec = fmt::format("{:g}", step - std::floor(step)).size() - 2;
     if (space.write_hover(fmt::format("[{:+.{}f}]", x, prec), space.config().colors.hover, space.color())) {
         x = clamp(min, max, x + step * std::round(space.input().scroll_wheel));
     }
@@ -65,7 +66,7 @@ void ui_float(space& space, float32 step, float32& x) {
 
 void ui_text_in(space& space, std::string& s, uint32 min_len) {
     const auto str = s;
-    
+
     const auto bounds = space.measure(str);
 
     const auto nvg = space.nvg();
@@ -149,6 +150,8 @@ void ui_viz_sine(space& space, NVGcolor stroke, uint32 lines, uint32 samples, fl
 
     const auto rect = outer_rect.inflate(-2.f);
 
+    nvgSave(nvg);
+    nvgIntersectScissor(nvg, rect.pos.x, rect.pos.y, rect.size.x, rect.size.y);
     nvgBeginPath(nvg);
     for (uint32 i = 0; i < samples; ++i) {
         const auto x = static_cast<float32>(i) / static_cast<float32>(samples);
@@ -160,6 +163,49 @@ void ui_viz_sine(space& space, NVGcolor stroke, uint32 lines, uint32 samples, fl
     nvgStrokeColor(nvg, stroke);
     nvgStrokeWidth(nvg, 1.f);
     nvgStroke(nvg);
+    nvgRestore(nvg);
+
+    nvgRestore(nvg);
+}
+
+void ui_viz_wf(space& space, NVGcolor stroke, uint32 lines, float32 ampl, std::span<const sample> samples) {
+    const auto nvg = space.nvg();
+    const auto outer_rect = space.draw_block(lines);
+
+    nvgSave(nvg);
+
+    draw_grid(space, space.config().colors.faint, outer_rect,
+              std::min(outer_rect.size.x, outer_rect.size.y) / 2.f);
+
+    nvgBeginPath(nvg);
+    nvgMoveTo(nvg, outer_rect.pos.x, outer_rect.center().y);
+    nvgLineTo(nvg, outer_rect.max().x, outer_rect.center().y);
+    nvgStrokeColor(nvg, space.config().colors.fg);
+    nvgStrokeWidth(nvg, 1.f);
+    nvgStroke(nvg);
+
+    nvgBeginPath(nvg);
+    nvgRoundedRect(nvg, outer_rect.pos.x, outer_rect.pos.y, outer_rect.size.x, outer_rect.size.y, 4.f);
+    nvgStrokeColor(nvg, space.config().colors.frame);
+    nvgStrokeWidth(nvg, 1.5f);
+    nvgStroke(nvg);
+
+    const auto rect = outer_rect.inflate(-2.f);
+
+    nvgSave(nvg);
+    nvgIntersectScissor(nvg, rect.pos.x, rect.pos.y, rect.size.x, rect.size.y);
+    nvgBeginPath(nvg);
+    for (uint32 i = 0; i < samples.size(); ++i) {
+        const auto x = static_cast<float32>(i) / static_cast<float32>(samples.size());
+        const auto y = ampl * samples[i];
+
+        (i == 0 ? nvgMoveTo : nvgLineTo)(nvg, rect.pos.x + x * rect.size.x,
+                                         rect.pos.y + rect.size.y * (1.f - y) / 2.f);
+    }
+    nvgStrokeColor(nvg, stroke);
+    nvgStrokeWidth(nvg, 1.f);
+    nvgStroke(nvg);
+    nvgRestore(nvg);
 
     nvgRestore(nvg);
 }

@@ -67,3 +67,5 @@ template<typename T>
 inline T clamp(T min, T max, T x) {
     return std::min(max, std::max(min, x));
 }
+
+struct none final {};

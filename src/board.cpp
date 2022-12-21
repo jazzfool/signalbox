@@ -1,6 +1,7 @@
 #include "board.h"
 
 #include "util.h"
+#include "widget.h"
 
 #include <gl/glew.h>
 #include <GLFW/glfw3.h>
@@ -11,7 +12,7 @@
 
 #include <spdlog/spdlog.h>
 
-board::board() {
+board::board() : m_filter_executor{m_filters} {
     m_frame0 = true;
     m_max_layout_height = 0.f;
 }
@@ -67,7 +68,7 @@ board& board::create() {
 
     glfwSetKeyCallback(m_window, [](GLFWwindow* window, int32 key, int32 scancode, int32 action, int32 mods) {
         auto& b = *reinterpret_cast<board*>(glfwGetWindowUserPointer(window));
-        if (action == GLFW_PRESS) {
+        if (action == GLFW_PRESS || action == GLFW_REPEAT) {
             b.m_input.keys_just_pressed[key] = true;
         }
     });
@@ -94,10 +95,14 @@ board& board::create() {
     m_config.outer_padding = 10.f;
     m_config.inner_padding = 5.f;
 
+    m_filter_executor.create();
+
     return *this;
 }
 
 void board::destroy() {
+    m_filter_executor.destroy();
+
     nvgDeleteGL3(m_nvg);
     glfwDestroyWindow(m_window);
     glfwTerminate();
@@ -131,10 +136,26 @@ board& board::run_loop() {
 
         reset_layout();
 
-        for (auto& f : m_filters) {
-            auto space = make_space(f->space_size());
+        {
+            auto s = make_spacef(
+                {m_layout_rect.size.x, m_config.line_height * 2.f + 2.f * m_config.inner_padding});
+            s.begin();
+            s.set_bold(true);
+            s.write("ACTIVE");
+            s.set_bold(false);
+            s.next_line();
+            s.write("Channel Left OUT: ");
+            ui_chan_sel(s, m_filter_executor.out_l_chan);
+            s.write(" Channel Right OUT: ");
+            ui_chan_sel(s, m_filter_executor.out_r_chan);
+            s.end();
+        }
+
+        for (auto& f : m_filters.filters) {
+            auto space = make_space(f->size());
             space.begin();
-            f->draw_space(space);
+            f->update();
+            f->draw(space);
             space.end();
         }
 
@@ -156,13 +177,16 @@ const board_config& board::config() const {
     return m_config;
 }
 
-space board::make_space(const vector2<uint32>& textSize) {
+space board::make_space(const vector2<uint32>& text_size) {
     const auto size = vector2<float32>{
-        static_cast<float32>(textSize.x) * m_config.char_width + 2.f * m_config.inner_padding,
-        static_cast<float32>(textSize.y) * m_config.line_height + 2.f * m_config.inner_padding,
+        static_cast<float32>(text_size.x) * m_config.char_width + 2.f * m_config.inner_padding,
+        static_cast<float32>(text_size.y) * m_config.line_height + 2.f * m_config.inner_padding,
     };
+    return make_spacef(size);
+}
 
-    if (size.x > m_layout_rect.size.x - m_layout_cursor.x) {
+space board::make_spacef(const vector2<float32>& size) {
+    if (size.x > m_layout_rect.max().x - m_layout_cursor.x) {
         m_layout_cursor.x = m_layout_rect.pos.x;
         m_layout_cursor.y += m_max_layout_height + m_config.outer_padding;
         m_max_layout_height = 0.f;
