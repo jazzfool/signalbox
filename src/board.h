@@ -25,11 +25,12 @@ class board final {
 
     const board_config& config() const;
 
+    board& add_filter(std::unique_ptr<filter_base>&& filter);
+
     template <typename TDataIn, typename TDataOut>
     board& add_filter(filter<TDataIn, TDataOut>&& filter) {
         auto lock = std::lock_guard{m_filters.mut};
-        m_filters.filters.push_back(std::make_unique<filter_fwd<TDataIn, TDataOut>>(std::move(filter)));
-        return *this;
+        return add_filter(std::make_unique<filter_fwd<TDataIn, TDataOut>>(std::move(filter)));
     }
 
   private:
@@ -51,4 +52,5 @@ class board final {
 
     filter_executor m_filter_executor;
     filter_list m_filters;
+    std::string m_executor_status;
 };

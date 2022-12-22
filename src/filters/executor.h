@@ -7,6 +7,9 @@
 #include <vector>
 #include <memory>
 #include <mutex>
+#include <atomic>
+#include <string>
+#include <ringbuffer.hpp>
 
 static constexpr uint32 IO_SAMPLE_RATE = 48000;
 static constexpr uint32 IO_FRAME_COUNT = 480;
@@ -25,8 +28,10 @@ public:
     void create();
     void destroy();
 
-    uint8 out_l_chan;
-    uint8 out_r_chan;
+    std::atomic_uint8_t out_l_chan;
+    std::atomic_uint8_t out_r_chan;
+    std::atomic_bool out_mute;
+    jnk0le::Ringbuffer<std::string, 1> out_status;
 
 private:
     friend void ma_data_callback(ma_device*, void*, const void*, ma_uint32);

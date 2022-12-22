@@ -52,7 +52,13 @@ FetchContent_Declare(
     GIT_TAG 565a5149d54930463d58cb0f69b978d439555e66 # v1.1
 )
 
-FetchContent_MakeAvailable(glfw nanovg spdlog glew glm freetype miniaudio SPSCQueue)
+FetchContent_Declare(
+    RingBuffer
+    GIT_REPOSITORY https://github.com/jnk0le/Ring-Buffer.git
+    GIT_TAG 9217a86f6bc2ed9fcdd20775aaaafab856ff98e2 # latest
+)
+
+FetchContent_MakeAvailable(glfw nanovg spdlog glew glm freetype miniaudio SPSCQueue RingBuffer)
 
 add_library(nanovg)
 target_sources(nanovg PRIVATE ${CMAKE_BINARY_DIR}/_deps/nanovg-src/src/nanovg.c)
@@ -62,3 +68,6 @@ target_link_libraries(nanovg PRIVATE freetype)
 
 add_library(miniaudio INTERFACE)
 target_include_directories(miniaudio INTERFACE ${CMAKE_BINARY_DIR}/_deps/miniaudio-src)
+
+add_library(RingBuffer INTERFACE)
+target_include_directories(RingBuffer INTERFACE ${CMAKE_BINARY_DIR}/_deps/ringbuffer-src)

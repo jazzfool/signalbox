@@ -65,30 +65,30 @@ void ui_float(space& space, float32 step, float32& x) {
     ui_float_ran(space, -INFINITY, INFINITY, step, x);
 }
 
-void ui_int_btn(space& space, int32& x, int32 min, int32 max, bool inc) {
+void ui_int_btn(space& space, int32& x, int32 min, int32 max, int32 step, bool inc) {
     space.set_color(inc ? space.config().colors.green : space.config().colors.red);
     if (space.write_button(inc ? "+" : "-")) {
-        x = clamp(min, max, x + (int32)(((int8)inc << 1) - 1));
+        x = clamp(min, max, x + step * (int32)(((int8)inc << 1) - 1));
     }
 }
 
-void ui_int_ran(space& space, int32 min, int32 max, uint8 pad, int32& x) {
+void ui_int_ran(space& space, int32 min, int32 max, int32 step, uint8 pad, int32& x) {
     const auto rtl = space.rtl();
 
-    ui_int_btn(space, x, min, max, rtl);
+    ui_int_btn(space, x, min, max, step, rtl);
 
     space.set_color(space.config().colors.fg);
     if (space.write_hover(fmt::format("[{:0{}}]", x, pad), space.config().colors.hover, space.color())) {
-        x = clamp(min, max, x + static_cast<int32>(std::lround(space.input().scroll_wheel)));
+        x = clamp(min, max, x + step * static_cast<int32>(std::lround(space.input().scroll_wheel)));
     }
 
-    ui_int_btn(space, x, min, max, !rtl);
+    ui_int_btn(space, x, min, max, step, !rtl);
 
     space.set_color(space.config().colors.fg);
 }
 
-void ui_int(space& space, uint8 pad, int32& x) {
-    ui_int_ran(space, pad, INT32_MIN, INT32_MAX, x);
+void ui_int(space& space, int32 step, uint8 pad, int32& x) {
+    ui_int_ran(space, INT32_MIN, INT32_MAX, step, pad, x);
 }
 
 void ui_text_in(space& space, std::string& s, uint32 min_len) {
@@ -168,7 +168,7 @@ void ui_viz_sine(space& space, NVGcolor stroke, uint32 lines, uint32 samples, fl
     nvgStroke(nvg);
 
     nvgBeginPath(nvg);
-    nvgRoundedRect(nvg, outer_rect.pos.x, outer_rect.pos.y, outer_rect.size.x, outer_rect.size.y, 4.f);
+    nvgRoundedRect(nvg, outer_rect.pos.x, outer_rect.pos.y, outer_rect.size.x, outer_rect.size.y, 2.f);
     nvgStrokeColor(nvg, space.config().colors.frame);
     nvgStrokeWidth(nvg, 1.5f);
     nvgStroke(nvg);
@@ -210,7 +210,7 @@ void ui_viz_wf(space& space, NVGcolor stroke, uint32 lines, float32 ampl, std::s
     nvgStroke(nvg);
 
     nvgBeginPath(nvg);
-    nvgRoundedRect(nvg, outer_rect.pos.x, outer_rect.pos.y, outer_rect.size.x, outer_rect.size.y, 4.f);
+    nvgRoundedRect(nvg, outer_rect.pos.x, outer_rect.pos.y, outer_rect.size.x, outer_rect.size.y, 2.f);
     nvgStrokeColor(nvg, space.config().colors.frame);
     nvgStrokeWidth(nvg, 1.5f);
     nvgStroke(nvg);

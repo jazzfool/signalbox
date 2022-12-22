@@ -15,6 +15,7 @@
 board::board() : m_filter_executor{m_filters} {
     m_frame0 = true;
     m_max_layout_height = 0.f;
+    m_executor_status = "INACTIVE";
 }
 
 board& board::create() {
@@ -129,6 +130,11 @@ const board_config& board::config() const {
     return m_config;
 }
 
+board& board::add_filter(std::unique_ptr<filter_base>&& filter) {
+    m_filters.filters.push_back(std::move(filter));
+    return *this;
+}
+
 space board::make_space(const vector2<uint32>& text_size) {
     const auto size = vector2<float32>{
         static_cast<float32>(text_size.x) * m_config.char_width + 2.f * m_config.inner_padding,
@@ -179,18 +185,33 @@ void board::draw_frame() {
     reset_layout();
 
     {
+        m_filter_executor.out_status.remove(&m_executor_status);
+
+        auto out_l_chan = m_filter_executor.out_l_chan.load();
+        auto out_r_chan = m_filter_executor.out_r_chan.load();
+        const auto muted = m_filter_executor.out_mute.load();
+
         auto s =
             make_spacef({m_layout_rect.size.x, m_config.line_height * 2.f + 2.f * m_config.inner_padding});
         s.begin();
         s.set_bold(true);
-        s.write("ACTIVE");
+        s.write(m_executor_status);
         s.set_bold(false);
+        s.set_rtl(true);
+        if (s.write_button(muted ? "Unmute" : "Mute")) {
+            m_filter_executor.out_mute.store(!m_filter_executor.out_mute.load());
+            m_filter_executor.out_mute.store(!muted); // not atomic but other threads will only read
+        }
+        s.set_rtl(false);
         s.next_line();
         s.write("Channel Left OUT: ");
-        ui_chan_sel(s, m_filter_executor.out_l_chan);
+        ui_chan_sel(s, out_l_chan);
         s.write(" Channel Right OUT: ");
-        ui_chan_sel(s, m_filter_executor.out_r_chan);
+        ui_chan_sel(s, out_r_chan);
         s.end();
+
+        m_filter_executor.out_l_chan.store(out_l_chan);
+        m_filter_executor.out_r_chan.store(out_r_chan);
     }
 
     auto swapped = std::optional<std::array<decltype(m_filters.filters)::iterator, 2>>{};
