@@ -16,7 +16,8 @@ void filter_executor::create() {
     auto config = ma_device_config_init(ma_device_type_duplex);
     config.playback.format = ma_format_f32;
     config.playback.channels = 2;
-    config.sampleRate = 48000;
+    config.sampleRate = IO_SAMPLE_RATE;
+    config.periodSizeInFrames = IO_FRAME_COUNT;
     config.dataCallback = ma_data_callback;
     config.pUserData = this;
 
@@ -35,7 +36,7 @@ void filter_executor::data_callback(void* output, const void* input, uint32 fram
     channels chans;
     chans.frame_count = frame_count;
     auto base_chan = channel{};
-    base_chan.samples = std::vector(frame_count, 0.f), base_chan.sample_rate = 48000;
+    base_chan.samples = std::vector(frame_count, 0.f), base_chan.sample_rate = IO_SAMPLE_RATE;
     for (auto& chan : chans.chans) {
         chan = base_chan;
     }

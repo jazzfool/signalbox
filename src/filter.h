@@ -6,12 +6,14 @@
 #include <functional>
 #include <memory>
 #include <array>
+#include <string>
 #include <rigtorp/SPSCQueue.h>
 
 struct space;
 
 struct filter_base {
     virtual ~filter_base() {}
+    virtual const std::string& name() const = 0;
     virtual vector2<uint32> size() = 0;
     virtual void draw(space& space) = 0;
     virtual void update() = 0;
@@ -20,6 +22,7 @@ struct filter_base {
 
 template <typename TDataIn, typename TDataOut>
 struct filter final {
+    std::string name;
     TDataIn data;
     std::function<vector2<uint32>(const TDataIn&)> size;
     std::function<void(TDataIn&, space&)> draw;
@@ -54,6 +57,10 @@ struct filter_fwd final : filter_base {
             data_out = std::move(rhs.data_out);
         }
         return *this;
+    }
+
+    const std::string& name() const override {
+        return f.name;
     }
 
     vector2<uint32> size() override {

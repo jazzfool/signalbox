@@ -50,7 +50,7 @@ void ui_float_ran(space& space, float32 min, float32 max, float32 step, float32&
     ui_float_btn(space, x, min, max, step, rtl);
 
     space.set_color(space.config().colors.fg);
-    const auto prec = fmt::format("{:g}", step - std::floor(step)).size() - 2;
+    const auto prec = std::max(static_cast<int32>(fmt::format("{:g}", step - std::floor(step)).size()) - 2, 0);
     if (space.write_hover(fmt::format("[{:+.{}f}]", x, prec), space.config().colors.hover, space.color())) {
         x = clamp(min, max, x + step * std::round(space.input().scroll_wheel));
     }

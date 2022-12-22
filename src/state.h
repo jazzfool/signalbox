@@ -18,6 +18,7 @@ struct board_colors final {
     NVGcolor red;
     NVGcolor green;
     NVGcolor blue;
+    NVGcolor yellow;
 
     static board_colors dark() {
         return board_colors{
@@ -29,6 +30,7 @@ struct board_colors final {
             .red = nvgRGB(247, 47, 80),
             .green = nvgRGB(107, 255, 127),
             .blue = nvgRGB(76, 89, 252),
+            .yellow = nvgRGB(252, 232, 3),
         };
     }
 };

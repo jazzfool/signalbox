@@ -73,6 +73,14 @@ board& board::create() {
         }
     });
 
+    glfwSetFramebufferSizeCallback(m_window, [](GLFWwindow* window, int32, int32) {
+        auto p = glfwGetWindowUserPointer(window);
+        if (!p)
+            return;
+        auto& b = *reinterpret_cast<board*>(p);
+        b.draw_frame();
+    });
+
     glfwMakeContextCurrent(m_window);
 
     glewExperimental = GL_TRUE;
@@ -110,63 +118,7 @@ void board::destroy() {
 
 board& board::run_loop() {
     while (!glfwWindowShouldClose(m_window)) {
-        float32 x_scale, y_scale;
-        glfwGetWindowContentScale(m_window, &x_scale, &y_scale);
-
-        int32 width, height;
-        glfwGetWindowSize(m_window, &width, &height);
-
-        int32 fb_width, fb_height;
-        glfwGetFramebufferSize(m_window, &fb_width, &fb_height);
-
-        glViewport(0, 0, fb_width, fb_height);
-        glClearColor(0.f, 0.f, 0.f, 1.f);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
-
-        nvgBeginFrame(m_nvg, width, height, m_dpi_scale);
-        nvgScale(m_nvg, x_scale, y_scale);
-
-        if (m_frame0) {
-            m_frame0 = false;
-            nvgFontFace(m_nvg, "mono");
-            nvgFontSize(m_nvg, m_config.font_size);
-            nvgTextAlign(m_nvg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
-            m_config.char_width = nvgTextBounds(m_nvg, 0.f, 0.f, " ", nullptr, nullptr);
-        }
-
-        reset_layout();
-
-        {
-            auto s = make_spacef(
-                {m_layout_rect.size.x, m_config.line_height * 2.f + 2.f * m_config.inner_padding});
-            s.begin();
-            s.set_bold(true);
-            s.write("ACTIVE");
-            s.set_bold(false);
-            s.next_line();
-            s.write("Channel Left OUT: ");
-            ui_chan_sel(s, m_filter_executor.out_l_chan);
-            s.write(" Channel Right OUT: ");
-            ui_chan_sel(s, m_filter_executor.out_r_chan);
-            s.end();
-        }
-
-        for (auto& f : m_filters.filters) {
-            auto space = make_space(f->size());
-            space.begin();
-            f->update();
-            f->draw(space);
-            space.end();
-        }
-
-        nvgEndFrame(m_nvg);
-
-        m_input.keys_just_pressed.fill(false);
-        m_input.mouse_just_pressed = {false, false, false};
-        m_input.scroll_wheel = 0.f;
-        m_input.text.reset();
-
-        glfwSwapBuffers(m_window);
+        draw_frame();
         glfwPollEvents();
     }
 
@@ -197,6 +149,95 @@ space board::make_spacef(const vector2<float32>& size) {
     m_layout_cursor.x += size.x + m_config.outer_padding;
 
     return space{m_window, m_nvg, m_focus, m_input, m_config, space_rect};
+}
+
+void board::draw_frame() {
+    float32 x_scale, y_scale;
+    glfwGetWindowContentScale(m_window, &x_scale, &y_scale);
+
+    int32 width, height;
+    glfwGetWindowSize(m_window, &width, &height);
+
+    int32 fb_width, fb_height;
+    glfwGetFramebufferSize(m_window, &fb_width, &fb_height);
+
+    glViewport(0, 0, fb_width, fb_height);
+    glClearColor(0.f, 0.f, 0.f, 1.f);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+
+    nvgBeginFrame(m_nvg, width, height, m_dpi_scale);
+    nvgScale(m_nvg, x_scale, y_scale);
+
+    if (m_frame0) {
+        m_frame0 = false;
+        nvgFontFace(m_nvg, "mono");
+        nvgFontSize(m_nvg, m_config.font_size);
+        nvgTextAlign(m_nvg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
+        m_config.char_width = nvgTextBounds(m_nvg, 0.f, 0.f, " ", nullptr, nullptr);
+    }
+
+    reset_layout();
+
+    {
+        auto s =
+            make_spacef({m_layout_rect.size.x, m_config.line_height * 2.f + 2.f * m_config.inner_padding});
+        s.begin();
+        s.set_bold(true);
+        s.write("ACTIVE");
+        s.set_bold(false);
+        s.next_line();
+        s.write("Channel Left OUT: ");
+        ui_chan_sel(s, m_filter_executor.out_l_chan);
+        s.write(" Channel Right OUT: ");
+        ui_chan_sel(s, m_filter_executor.out_r_chan);
+        s.end();
+    }
+
+    auto swapped = std::optional<std::array<decltype(m_filters.filters)::iterator, 2>>{};
+
+    for (auto it = m_filters.filters.begin(); it != m_filters.filters.end(); ++it) {
+        auto& f = **it;
+        const auto idx = std::distance(m_filters.filters.begin(), it);
+
+        auto space = make_space(f.size());
+        space.begin();
+
+        space.set_bold(true);
+        space.set_color(m_config.colors.yellow);
+        if (space.write_button("<") && it != m_filters.filters.begin()) {
+            swapped = {it, it - 1};
+        }
+        space.set_color(m_config.colors.fg);
+        space.write(fmt::format("{:03}", idx));
+        space.set_color(m_config.colors.yellow);
+        if (space.write_button(">") && it != m_filters.filters.end() - 1) {
+            swapped = {it, it + 1};
+        }
+        space.set_color(m_config.colors.fg);
+        space.set_rtl(true);
+        space.write(f.name());
+        space.set_bold(false);
+        space.set_rtl(false);
+        space.next_line();
+
+        f.update();
+        f.draw(space);
+        space.end();
+    }
+
+    if (swapped) {
+        auto lock = std::lock_guard{m_filters.mut};
+        std::iter_swap((*swapped)[0], (*swapped)[1]);
+    }
+
+    nvgEndFrame(m_nvg);
+
+    m_input.keys_just_pressed.fill(false);
+    m_input.mouse_just_pressed = {false, false, false};
+    m_input.scroll_wheel = 0.f;
+    m_input.text.reset();
+
+    glfwSwapBuffers(m_window);
 }
 
 void board::reset_layout() {

@@ -8,6 +8,9 @@
 #include <memory>
 #include <mutex>
 
+static constexpr uint32 IO_SAMPLE_RATE = 48000;
+static constexpr uint32 IO_FRAME_COUNT = 480;
+
 struct filter_base;
 
 struct filter_list final {

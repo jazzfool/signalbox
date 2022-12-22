@@ -33,6 +33,7 @@ class board final {
     }
 
   private:
+    void draw_frame();
     void reset_layout();
 
     board_config m_config;
