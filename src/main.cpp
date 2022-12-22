@@ -23,16 +23,16 @@ int main() {
     };
 
     struct filter2_data {
-        uint8 chan1;
-        uint8 chan2;
-        uint8 chan3;
+        uint8 in_chan;
+        int32 num_out_chans;
+        std::vector<uint8> out_chans;
     };
 
     board{}
         .create()
         .add_filter(filter<filter0_data, none>{
             .name = "SINE",
-            .data = {0, 0.1f, 1.f},
+            .data = {0, 0.1f, 440.f},
             .size =
                 [](auto&) {
                     return vector2<uint32>{25, 7};
@@ -41,7 +41,7 @@ int main() {
                 [](auto& data, auto& s) {
                     s.set_rtl(true);
                     ui_chan_sel(s, data.chan1);
-                    s.write("Channel A OUT ");
+                    s.write("Channel OUT ");
 
                     s.set_rtl(false);
                     s.next_line();
@@ -52,7 +52,7 @@ int main() {
                     s.write("Frequency: ");
                     ui_float_ran(s, 0.f, INFINITY, 1.f, data.freq);
 
-                    ui_viz_sine(s, nvgRGB(255, 0, 0), 3, 500, data.ampl, data.freq);
+                    ui_viz_sine(s, nvgRGB(255, 0, 0), 3, s.rect().size.x, data.ampl, data.freq);
                 },
             .update = [](auto& data, const auto& in) {},
             .apply = [x = float64{0.0}](const auto& data, auto& chans) mutable -> none {
@@ -74,7 +74,7 @@ int main() {
             .draw =
                 [](auto& data, auto& s) {
                     ui_chan_sel(s, data.chan1);
-                    s.write(" Channel A IN");
+                    s.write(" Channel IN");
 
                     s.next_line();
                     s.write("Amplify: ");
@@ -95,30 +95,39 @@ int main() {
         })
         .add_filter(filter<filter2_data, none>{
             .name = "SPLIT",
-            .data = {0, 0, 1},
+            .data = {0, 2, {0, 1}},
             .size =
-                [](auto&) {
-                    return vector2<uint32>{20, 4};
+                [](const auto& data) {
+                    return vector2<uint32>{25, 3 + data.num_out_chans};
                 },
             .draw =
                 [](auto& data, auto& s) {
-                    ui_chan_sel(s, data.chan1);
-                    s.write(" Channel A IN");
+                    ui_chan_sel(s, data.in_chan);
+                    s.write(" Channel IN");
 
                     s.next_line();
+                    s.write("Channels ");
+                    ui_int_ran(s, 0, 8, 2, data.num_out_chans);
+                    s.write(" OUT");
+
+                    if (data.out_chans.size() != data.num_out_chans) {
+                        data.out_chans.resize(data.num_out_chans, 0);
+                    }
+
                     s.set_rtl(true);
-                    ui_chan_sel(s, data.chan2);
-                    s.write("Channel B OUT ");
-
-                    s.next_line();
-                    ui_chan_sel(s, data.chan3);
-                    s.write("Channel C OUT ");
+                    auto idx = 0;
+                    for (auto& chan : data.out_chans) {
+                        s.next_line();
+                        ui_chan_sel(s, chan);
+                        s.write(fmt::format("Channel {:02} OUT ", idx));
+                        ++idx;
+                    }
                 },
             .update = [](auto& data, const auto& in) {},
             .apply = [](const auto& data, auto& chans) -> none {
-                const auto in = chans.chans[data.chan1];
-                for (auto chan : {data.chan2, data.chan3}) {
-                    if (chan == data.chan1)
+                const auto in = chans.chans[data.in_chan];
+                for (auto chan : data.out_chans) {
+                    if (chan == data.in_chan)
                         continue;
                     chans.chans[chan] = in;
                 }
