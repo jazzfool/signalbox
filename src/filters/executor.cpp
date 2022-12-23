@@ -68,10 +68,10 @@ void filter_executor::data_callback(void* output, const void* input, uint32 fram
         return;
     }
     
-    const auto info = fmt::format("{:04} frames out in {:05} mcs", frame_count, dur);
+    const auto info = fmt::format("[{:04} frames out in {:05} mcs] @ {} Hz", frame_count, dur, IO_SAMPLE_RATE);
 
     if (out_mute.load()) {
-        out_status.insert(fmt::format("MUTED [{}]", info));
+        out_status.insert(fmt::format("MUTED {}", info));
         return;
     }
 
@@ -80,7 +80,7 @@ void filter_executor::data_callback(void* output, const void* input, uint32 fram
         ::memcpy(out + i * 2 + 1, &r_samples[i], sizeof(float32));
     }
 
-    out_status.insert(fmt::format("ACTIVE [{}]", info));
+    out_status.insert(fmt::format("ACTIVE {}", info));
 }
 
 void filter_executor::execute_one(filter_base& f, channels& chans) {
