@@ -244,31 +244,55 @@ void ui_viz_meter(space& space, float32 level) {
     const auto height = space.config().line_height;
     const auto width = rect.size.x / (float32)count;
 
-    level = clamp(-50.f, 5.f, ma_volume_linear_to_db(level));
+    const auto db_min = -21.f;
+    const auto db_max = 3.1f;
+
+    const auto linear_min = ma_volume_db_to_linear(db_min);
+    const auto linear_max = ma_volume_db_to_linear(db_max);
 
     nvgSave(nvg);
     nvgBeginPath(nvg);
     nvgFillColor(nvg, space.config().colors.meter_lo);
     auto range = 0;
+    auto labels =
+        std::vector<std::optional<float32>>{-20.f, -10.f, -7.f, -5.f, -3.f, -2.f, -1.f, 0.f, 1.f, 2.f, 3.f};
     for (uint32 i = 0; i < count; ++i) {
-        const auto db = remap(0.f, 99.f, -55.f, 5.f, (float32)i);
+        const auto db =
+            remap(0.f, static_cast<float32>(count) - 1.f, db_min, db_max, static_cast<float32>(i));
+        const auto next_db =
+            remap(0.f, static_cast<float32>(count) - 1.f, db_min, db_max, static_cast<float32>(i + 1));
 
-        if (db > level)
-            break;
+        const auto linear = ma_volume_db_to_linear(db);
 
         if (db > 0.f && range < 2) {
             range = 2;
             nvgFill(nvg);
             nvgBeginPath(nvg);
             nvgFillColor(nvg, space.config().colors.meter_hi);
-        } else if (db > -10.f && range < 1) {
+        } else if (db > -5.f && range < 1) {
             range = 1;
             nvgFill(nvg);
             nvgBeginPath(nvg);
             nvgFillColor(nvg, space.config().colors.meter_md);
         }
 
-        nvgRect(nvg, rect.pos.x + width * (float32)i, rect.center().y - height / 2.f, width / 2.f, height);
+        for (auto& label : labels) {
+            if (label && db > *label) {
+                nvgSave(nvg);
+                nvgTextAlign(nvg, NVG_ALIGN_CENTER | NVG_ALIGN_BASELINE);
+                nvgFontFace(nvg, "monoB");
+                nvgFontSize(nvg, height / 2.f + 1.f);
+                nvgFillColor(nvg, space.config().colors.fg);
+                nvgText(
+                    nvg, rect.pos.x + width * (float32)i, rect.center().y - 1.f,
+                    fmt::format("{:+}", *label).c_str(), nullptr);
+                nvgRestore(nvg);
+                label.reset();
+            }
+        }
+
+        if (linear < level)
+            nvgRect(nvg, rect.pos.x + width * (float32)i, rect.center().y, width / 2.f, height / 2.f);
     }
     nvgFill(nvg);
     nvgRestore(nvg);

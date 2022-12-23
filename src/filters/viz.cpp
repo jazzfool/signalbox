@@ -64,7 +64,7 @@ std::unique_ptr<filter_base> fltr_viz_vu() {
         .data = {},
         .size =
             [](const data&) {
-                return vector2<uint32>{35, 3};
+                return vector2<uint32>{40, 3};
             },
         .draw = [](data& d, space& s) {
             ui_chan_sel(s, d.chan_in);
@@ -79,20 +79,10 @@ std::unique_ptr<filter_base> fltr_viz_vu() {
             },
         .apply = [](const data& d, channels& chans) -> out {
             auto o = out{};
-
-            auto min = float32{1.f};
-            auto max = float32{-1.f};
-
+            o.meter = -FLT_MAX;
             for (auto s : chans.chans[d.chan_in].samples) {
-                min = std::min(min, s);
-                max = std::max(max, s);
+                o.meter = std::max(std::abs(s), o.meter);
             }
-
-            min = std::abs(std::min(0.f, min));
-            max = std::max(0.f, max);
-
-            o.meter = std::max(min, max);
-
             return o;
         },
     };
