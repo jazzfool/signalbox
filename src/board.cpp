@@ -215,6 +215,7 @@ void board::draw_frame() {
     }
 
     auto swapped = std::optional<std::array<decltype(m_filters.filters)::iterator, 2>>{};
+    auto deleted = std::optional<decltype(m_filters.filters)::iterator>{};
 
     for (auto it = m_filters.filters.begin(); it != m_filters.filters.end(); ++it) {
         auto& f = **it;
@@ -224,6 +225,11 @@ void board::draw_frame() {
         space.begin();
 
         space.set_bold(true);
+        space.set_color(m_config.colors.red);
+        if (space.write_button("*")) {
+            deleted = {it};
+        }
+        space.write(" ");
         space.set_color(m_config.colors.yellow);
         if (space.write_button("<") && it != m_filters.filters.begin()) {
             swapped = {it, it - 1};
@@ -244,6 +250,11 @@ void board::draw_frame() {
         f.update();
         f.draw(space);
         space.end();
+    }
+
+    // practically mutually exclusive anyway but eh
+    if (deleted && !swapped) {
+        m_filters.filters.erase(*deleted);
     }
 
     if (swapped) {

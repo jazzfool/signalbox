@@ -3,6 +3,7 @@
 #include "filter.h"
 
 #include <spdlog/fmt/fmt.h>
+#include <chrono>
 
 void ma_data_callback(ma_device* device, void* output, const void* input, ma_uint32 frame_count) {
     reinterpret_cast<filter_executor*>(device->pUserData)
@@ -44,23 +45,33 @@ void filter_executor::data_callback(void* output, const void* input, uint32 fram
         chan = base_chan;
     }
 
+    const auto t_start = std::chrono::steady_clock::now();
+
     execute_all(chans);
+
+    const auto dur =
+        std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t_start)
+            .count();
 
     const auto& l_samples = chans.chans[out_l_chan.load()].samples;
     const auto& r_samples = chans.chans[out_r_chan.load()].samples;
 
     if (l_samples.size() < frame_count) {
-        out_status.insert(fmt::format("FAULT: Channel LEFT Sample Count {} < {}", l_samples.size(), frame_count));
+        out_status.insert(
+            fmt::format("FAULT: Channel LEFT Sample Count {} < {}", l_samples.size(), frame_count));
         return;
     }
 
     if (r_samples.size() < frame_count) {
-        out_status.insert(fmt::format("FAULT: Channel RIGHT Sample Count {} < {}", r_samples.size(), frame_count));
+        out_status.insert(
+            fmt::format("FAULT: Channel RIGHT Sample Count {} < {}", r_samples.size(), frame_count));
         return;
     }
+    
+    const auto info = fmt::format("{:04} frames out in {:05} mcs", frame_count, dur);
 
     if (out_mute.load()) {
-        out_status.insert(fmt::format("MUTED"));
+        out_status.insert(fmt::format("MUTED [{}]", info));
         return;
     }
 
@@ -69,7 +80,7 @@ void filter_executor::data_callback(void* output, const void* input, uint32 fram
         ::memcpy(out + i * 2 + 1, &r_samples[i], sizeof(float32));
     }
 
-    out_status.insert("ACTIVE");
+    out_status.insert(fmt::format("ACTIVE [{}]", info));
 }
 
 void filter_executor::execute_one(filter_base& f, channels& chans) {

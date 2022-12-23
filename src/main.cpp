@@ -13,6 +13,7 @@ int main() {
         .create()
         .add_filter(fltr_gen_sine())
         .add_filter(fltr_sig_delay())
+        .add_filter(fltr_sig_gain())
         .add_filter(fltr_viz_waveform())
         .add_filter(fltr_viz_vu())
         .add_filter(fltr_chn_split())
