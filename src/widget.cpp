@@ -9,6 +9,7 @@
 #include <GLFW/glfw3.h>
 #include <numbers>
 #include <codecvt>
+#include <miniaudio.h>
 
 void ui_chan_btn(space& space, uint8& chan, bool inc) {
     space.set_color(space.config().colors.blue);
@@ -157,8 +158,8 @@ void ui_viz_sine(space& space, NVGcolor stroke, uint32 lines, uint32 samples, fl
 
     nvgSave(nvg);
 
-    draw_grid(space, space.config().colors.faint, outer_rect,
-              std::min(outer_rect.size.x, outer_rect.size.y) / 2.f);
+    draw_grid(
+        space, space.config().colors.faint, outer_rect, std::min(outer_rect.size.x, outer_rect.size.y) / 2.f);
 
     nvgBeginPath(nvg);
     nvgMoveTo(nvg, outer_rect.pos.x, outer_rect.center().y);
@@ -182,8 +183,8 @@ void ui_viz_sine(space& space, NVGcolor stroke, uint32 lines, uint32 samples, fl
         const auto x = static_cast<float32>(i) / static_cast<float32>(samples);
         const auto y = ampl * std::sin(freq * x);
 
-        (i == 0 ? nvgMoveTo : nvgLineTo)(nvg, rect.pos.x + x * rect.size.x,
-                                         rect.pos.y + rect.size.y * (1.f - y) / 2.f);
+        (i == 0 ? nvgMoveTo
+                : nvgLineTo)(nvg, rect.pos.x + x * rect.size.x, rect.pos.y + rect.size.y * (1.f - y) / 2.f);
     }
     nvgStrokeColor(nvg, stroke);
     nvgStrokeWidth(nvg, 1.f);
@@ -199,8 +200,8 @@ void ui_viz_wf(space& space, NVGcolor stroke, uint32 lines, float32 ampl, std::s
 
     nvgSave(nvg);
 
-    draw_grid(space, space.config().colors.faint, outer_rect,
-              std::min(outer_rect.size.x, outer_rect.size.y) / 2.f);
+    draw_grid(
+        space, space.config().colors.faint, outer_rect, std::min(outer_rect.size.x, outer_rect.size.y) / 2.f);
 
     nvgBeginPath(nvg);
     nvgMoveTo(nvg, outer_rect.pos.x, outer_rect.center().y);
@@ -224,13 +225,51 @@ void ui_viz_wf(space& space, NVGcolor stroke, uint32 lines, float32 ampl, std::s
         const auto x = static_cast<float32>(i) / static_cast<float32>(samples.size());
         const auto y = ampl * samples[i];
 
-        (i == 0 ? nvgMoveTo : nvgLineTo)(nvg, rect.pos.x + x * rect.size.x,
-                                         rect.pos.y + rect.size.y * (1.f - y) / 2.f);
+        (i == 0 ? nvgMoveTo
+                : nvgLineTo)(nvg, rect.pos.x + x * rect.size.x, rect.pos.y + rect.size.y * (1.f - y) / 2.f);
     }
     nvgStrokeColor(nvg, stroke);
     nvgStrokeWidth(nvg, 1.f);
     nvgStroke(nvg);
     nvgRestore(nvg);
 
+    nvgRestore(nvg);
+}
+
+void ui_viz_meter(space& space, float32 level) {
+    const auto nvg = space.nvg();
+    const auto rect = space.draw_block(1);
+
+    const auto count = 100;
+    const auto height = space.config().line_height;
+    const auto width = rect.size.x / (float32)count;
+
+    level = clamp(-50.f, 5.f, ma_volume_linear_to_db(level));
+
+    nvgSave(nvg);
+    nvgBeginPath(nvg);
+    nvgFillColor(nvg, space.config().colors.meter_lo);
+    auto range = 0;
+    for (uint32 i = 0; i < count; ++i) {
+        const auto db = remap(0.f, 99.f, -55.f, 5.f, (float32)i);
+
+        if (db > level)
+            break;
+
+        if (db > 0.f && range < 2) {
+            range = 2;
+            nvgFill(nvg);
+            nvgBeginPath(nvg);
+            nvgFillColor(nvg, space.config().colors.meter_hi);
+        } else if (db > -10.f && range < 1) {
+            range = 1;
+            nvgFill(nvg);
+            nvgBeginPath(nvg);
+            nvgFillColor(nvg, space.config().colors.meter_md);
+        }
+
+        nvgRect(nvg, rect.pos.x + width * (float32)i, rect.center().y - height / 2.f, width / 2.f, height);
+    }
+    nvgFill(nvg);
     nvgRestore(nvg);
 }

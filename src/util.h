@@ -68,4 +68,9 @@ inline T clamp(T min, T max, T x) {
     return std::min(max, std::max(min, x));
 }
 
+template<typename T>
+inline T remap(T in_lo, T in_hi, T out_lo, T out_hi, T x) {
+    return out_lo + (x - in_lo) * (out_hi - out_lo) / (in_hi - in_lo);
+}
+
 struct none final {};

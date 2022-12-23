@@ -19,6 +19,9 @@ struct board_colors final {
     NVGcolor green;
     NVGcolor blue;
     NVGcolor yellow;
+    NVGcolor meter_lo;
+    NVGcolor meter_md;
+    NVGcolor meter_hi;
 
     static board_colors dark() {
         return board_colors{
@@ -31,6 +34,9 @@ struct board_colors final {
             .green = nvgRGB(107, 255, 127),
             .blue = nvgRGB(76, 89, 252),
             .yellow = nvgRGB(252, 232, 3),
+            .meter_lo = nvgRGB(3, 252, 7),
+            .meter_md = nvgRGB(246, 255, 0),
+            .meter_hi = nvgRGB(255, 51, 0),
         };
     }
 };

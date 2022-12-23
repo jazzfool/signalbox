@@ -18,3 +18,4 @@ void ui_int(space& space, int32 step, uint8 pad, int32& x);
 void ui_text_in(space& space, std::string& s, uint32 min_len);
 void ui_viz_sine(space& space, NVGcolor stroke, uint32 lines, uint32 samples, float32 ampl, float32 freq);
 void ui_viz_wf(space& space, NVGcolor stroke, uint32 lines, float32 ampl, std::span<const sample> samples);
+void ui_viz_meter(space& space, float32 level);
