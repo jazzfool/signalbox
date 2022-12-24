@@ -177,6 +177,47 @@ board& board::register_filter(filter_fn fn) {
 
 void board::add_filter(std::unique_ptr<filter_base>&& filter) {
     auto lock = std::lock_guard{m_filters.mut};
+
+    const auto chan_in = filter->data_chans_in();
+    const auto chan_out = filter->data_chans_out();
+
+    if (chan_in || chan_out) {
+        auto chan = uint8{0};
+        auto max = uint8{0};
+        auto b = false;
+        for (auto& f : m_filters.filters) {
+            const auto f_chan_in = f->data_chans_in();
+            const auto f_chan_out = f->data_chans_out();
+            if (f_chan_in) {
+                for (auto c : f_chan_in->chans_in()) {
+                    max = std::max(c, max);
+                }
+            }
+            if (f_chan_out) {
+                b = true;
+                for (auto c : f_chan_out->chans_out()) {
+                    max = std::max(c, max);
+                    chan = std::max(c, chan);
+                }
+            }
+        }
+
+        if (chan_in) {
+            for (auto& c : chan_in->chans_in()) {
+                c = chan;
+                chan -= (uint8)(chan > 0);
+            }
+        }
+
+        if (chan_out) {
+            for (auto& c : chan_out->chans_out()) {
+                c = max += (uint8)(b);
+                b = false;
+                max = std::min(max, uint8{99});
+            }
+        }
+    }
+
     m_filters.filters.push_back(std::move(filter));
 }
 
