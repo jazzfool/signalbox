@@ -12,6 +12,7 @@ space::space(GLFWwindow* window, NVGcontext* nvg, void*& focus, input_state inpu
     m_layout_cursor = m_rect.pos;
     m_available_width = m_rect.size.x;
     m_rtl = false;
+    m_bold = false;
 
     m_color = m_config.colors.fg;
 }

@@ -1,4 +1,4 @@
-#include "sig.h"
+#include "fir.h"
 
 #include "space.h"
 #include "widget.h"
@@ -6,10 +6,8 @@
 #include <algorithm>
 #include <miniaudio.h>
 
-std::unique_ptr<filter_base> fltr_sig_delay() {
-    struct data {
-        uint8 chan_in = 0;
-        uint8 chan_out = 1;
+std::unique_ptr<filter_base> fltr_fir_delay() {
+    struct data : fd_chan_in<1>, fd_chan_out<1> {
         int32 delay = 100;
     };
 
@@ -20,6 +18,7 @@ std::unique_ptr<filter_base> fltr_sig_delay() {
 
     auto f = filter<data, none>{
         .name = "DELAY",
+        .kind = filter_kind::fir,
         .data = {},
         .size =
             [](const data&) {
@@ -70,15 +69,14 @@ std::unique_ptr<filter_base> fltr_sig_delay() {
     return std::make_unique<filter_fwd<data, none>>(std::move(f));
 }
 
-std::unique_ptr<filter_base> fltr_sig_gain() {
-    struct data {
-        uint8 chan_in = 0;
-        uint8 chan_out = 1;
+std::unique_ptr<filter_base> fltr_fir_gain() {
+    struct data : fd_chan_in<1>, fd_chan_out<1> {
         float32 gain_db = 0.f;
     };
 
     auto f = filter<data, none>{
         .name = "GAIN",
+        .kind = filter_kind::fir,
         .data = {},
         .size = [](const data& d) { return vector2<float32>(25, 4); },
         .draw =

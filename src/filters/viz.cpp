@@ -5,9 +5,8 @@
 #include "executor.h"
 
 std::unique_ptr<filter_base> fltr_viz_waveform() {
-    struct data {
-        uint8 chan1;
-        float32 ampl;
+    struct data : fd_chan_in<1> {
+        float32 ampl = 1.f;
         std::vector<sample> samples;
     };
 
@@ -17,14 +16,15 @@ std::unique_ptr<filter_base> fltr_viz_waveform() {
 
     auto f = filter<data, out>{
         .name = "WAVEFORM",
-        .data = {0, 1.f, {}},
+        .kind = filter_kind::viz,
+        .data = {},
         .size =
             [](auto&) {
                 return vector2<uint32>{30, 6};
             },
         .draw =
-            [](auto& data, auto& s) {
-                ui_chan_sel(s, data.chan1);
+            [](data& data, space& s) {
+                ui_chan_sel(s, data.chan_in);
                 s.write(" Channel IN");
 
                 s.next_line();
@@ -34,13 +34,13 @@ std::unique_ptr<filter_base> fltr_viz_waveform() {
                 ui_viz_wf(s, nvgRGB(0, 255, 0), 3, data.ampl, data.samples);
             },
         .update =
-            [](auto& data, const auto& in) {
+            [](data& data, const out& in) {
                 //
                 data.samples.assign(in.samples.begin(), in.samples.end());
             },
-        .apply = [](const auto& data, auto& chans) -> out {
+        .apply = [](const data& data, channels& chans) -> out {
             auto o = out{};
-            std::copy_n(chans.chans[data.chan1].samples.begin(), IO_FRAME_COUNT, o.samples.begin());
+            std::copy_n(chans.chans[data.chan_in].samples.begin(), IO_FRAME_COUNT, o.samples.begin());
             return o;
         },
     };
@@ -49,8 +49,7 @@ std::unique_ptr<filter_base> fltr_viz_waveform() {
 }
 
 std::unique_ptr<filter_base> fltr_viz_vu() {
-    struct data {
-        uint8 chan_in = 0;
+    struct data : fd_chan_in<1> {
         float32 peak = 0.f;
         float32 meter = 0.f;
     };
@@ -61,17 +60,19 @@ std::unique_ptr<filter_base> fltr_viz_vu() {
 
     auto f = filter<data, out>{
         .name = "VU",
+        .kind = filter_kind::viz,
         .data = {},
         .size =
             [](const data&) {
                 return vector2<uint32>{40, 3};
             },
-        .draw = [](data& d, space& s) {
-            ui_chan_sel(s, d.chan_in);
-            s.write(" Channel IN");
+        .draw =
+            [](data& d, space& s) {
+                ui_chan_sel(s, d.chan_in);
+                s.write(" Channel IN");
 
-            ui_viz_meter(s, d.meter);
-        },
+                ui_viz_meter(s, d.meter);
+            },
         .update =
             [](data& d, const out& o) {
                 d.meter = o.meter;

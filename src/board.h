@@ -25,15 +25,20 @@ class board final {
 
     const board_config& config() const;
 
-    board& add_filter(std::unique_ptr<filter_base>&& filter);
-
-    template <typename TDataIn, typename TDataOut>
-    board& add_filter(filter<TDataIn, TDataOut>&& filter) {
-        auto lock = std::lock_guard{m_filters.mut};
-        return add_filter(std::make_unique<filter_fwd<TDataIn, TDataOut>>(std::move(filter)));
-    }
+    board& register_filter(filter_fn fn);
 
   private:
+    struct filter_info final {
+        filter_fn fn;
+        std::string name;
+        filter_kind kind;
+        std::string in;
+        std::string out;
+    };
+
+    void add_filter(std::unique_ptr<filter_base>&& filter);
+
+    space new_spacef(const rect2<float32>& rect);
     void draw_frame();
     void reset_layout();
 
@@ -46,10 +51,12 @@ class board final {
     rect2<float32> m_layout_rect;
     vector2<float32> m_layout_cursor;
     float32 m_max_layout_height;
+    uint32 m_panel_width;
 
     input_state m_input;
     void* m_focus;
 
+    std::vector<filter_info> m_all_filters;
     filter_executor m_filter_executor;
     filter_list m_filters;
     std::string m_executor_status;

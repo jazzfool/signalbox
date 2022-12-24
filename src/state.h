@@ -1,6 +1,7 @@
 #pragma once
 
 #include "util.h"
+#include "filter.h"
 
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
@@ -13,6 +14,7 @@ struct board_colors final {
     NVGcolor bg;
     NVGcolor fg;
     NVGcolor frame;
+    NVGcolor semifaint;
     NVGcolor faint;
     NVGcolor hover;
     NVGcolor red;
@@ -22,12 +24,14 @@ struct board_colors final {
     NVGcolor meter_lo;
     NVGcolor meter_md;
     NVGcolor meter_hi;
+    std::unordered_map<filter_kind, NVGcolor> filters;
 
     static board_colors dark() {
         return board_colors{
             .bg = nvgRGB(0, 0, 0),
             .fg = nvgRGB(255, 255, 255),
             .frame = nvgRGB(100, 100, 100),
+            .semifaint = nvgRGB(120, 120, 120),
             .faint = nvgRGB(50, 50, 50),
             .hover = nvgRGB(100, 100, 100),
             .red = nvgRGB(247, 47, 80),
@@ -37,6 +41,15 @@ struct board_colors final {
             .meter_lo = nvgRGB(3, 252, 7),
             .meter_md = nvgRGB(246, 255, 0),
             .meter_hi = nvgRGB(255, 51, 0),
+            .filters =
+                {
+                    {filter_kind::chn, nvgRGB(73, 148, 166)},
+                    {filter_kind::gen, nvgRGB(106, 171, 89)},
+                    {filter_kind::viz, nvgRGB(74, 181, 124)},
+                    {filter_kind::fir, nvgRGB(135, 76, 194)},
+                    {filter_kind::iir, nvgRGB(194, 76, 151)},
+                    {filter_kind::misc, nvgRGB(156, 135, 141)},
+                },
         };
     }
 };

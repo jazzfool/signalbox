@@ -16,6 +16,7 @@ board::board() : m_filter_executor{m_filters} {
     m_frame0 = true;
     m_max_layout_height = 0.f;
     m_executor_status = "INACTIVE";
+    m_panel_width = 20;
 }
 
 board& board::create() {
@@ -126,15 +127,6 @@ board& board::run_loop() {
     return *this;
 }
 
-const board_config& board::config() const {
-    return m_config;
-}
-
-board& board::add_filter(std::unique_ptr<filter_base>&& filter) {
-    m_filters.filters.push_back(std::move(filter));
-    return *this;
-}
-
 space board::make_space(const vector2<uint32>& text_size) {
     const auto size = vector2<float32>{
         static_cast<float32>(text_size.x) * m_config.char_width + 2.f * m_config.inner_padding,
@@ -154,7 +146,42 @@ space board::make_spacef(const vector2<float32>& size) {
     const auto space_rect = rect2<float32>{m_layout_cursor, size};
     m_layout_cursor.x += size.x + m_config.outer_padding;
 
-    return space{m_window, m_nvg, m_focus, m_input, m_config, space_rect};
+    return new_spacef(space_rect);
+}
+
+const board_config& board::config() const {
+    return m_config;
+}
+
+board& board::register_filter(filter_fn fn) {
+    auto dummy = fn();
+
+    auto info = filter_info{};
+    info.fn = fn;
+    info.name = dummy->name();
+    info.kind = dummy->kind();
+
+    const auto fd_in = dummy->data_chans_in();
+    const auto fd_out = dummy->data_chans_out();
+
+    info.in =
+        fd_in ? fd_in->chans_in_is_dynamic() ? "**" : fmt::format("{:02}", fd_in->chans_in().size()) : "..";
+    info.out = fd_out
+                   ? fd_out->chans_out_is_dynamic() ? "**" : fmt::format("{:02}", fd_out->chans_out().size())
+                   : "..";
+
+    m_all_filters.push_back(std::move(info));
+
+    return *this;
+}
+
+void board::add_filter(std::unique_ptr<filter_base>&& filter) {
+    auto lock = std::lock_guard{m_filters.mut};
+    m_filters.filters.push_back(std::move(filter));
+}
+
+space board::new_spacef(const rect2<float32>& rect) {
+    return space{m_window, m_nvg, m_focus, m_input, m_config, rect};
 }
 
 void board::draw_frame() {
@@ -183,6 +210,39 @@ void board::draw_frame() {
     }
 
     reset_layout();
+
+    {
+        auto pushed = std::optional<decltype(m_all_filters)::iterator>{};
+
+        auto s = new_spacef(rect2<float32>{
+            {0.f, 0.f},
+            {static_cast<float32>(m_panel_width) * m_config.char_width + m_config.outer_padding,
+             m_layout_rect.size.y + 2.f * m_config.outer_padding}}
+                                .inflate(-m_config.outer_padding));
+
+        s.begin();
+        s.set_bold(true);
+        s.write("FILTERS");
+        s.next_line();
+        s.set_bold(false);
+        for (auto it = m_all_filters.begin(); it != m_all_filters.end(); ++it) {
+            s.set_rtl(false);
+            s.set_color(m_config.colors.filters[it->kind]);
+            if (s.write_button(it->name)) {
+                pushed = it;
+            }
+            s.set_rtl(true);
+            s.set_color(m_config.colors.semifaint);
+            s.write(fmt::format("{}->{}", it->in, it->out));
+            s.set_color(m_config.colors.fg);
+            s.next_line();
+        }
+        s.end();
+
+        if (pushed) {
+            add_filter((*pushed)->fn());
+        }
+    }
 
     {
         m_filter_executor.out_status.remove(&m_executor_status);
@@ -242,7 +302,9 @@ void board::draw_frame() {
         }
         space.set_color(m_config.colors.fg);
         space.set_rtl(true);
+        space.set_color(m_config.colors.filters[f.kind()]);
         space.write(f.name());
+        space.set_color(m_config.colors.fg);
         space.set_bold(false);
         space.set_rtl(false);
         space.next_line();
@@ -273,12 +335,16 @@ void board::draw_frame() {
 }
 
 void board::reset_layout() {
+    const auto panel_width = static_cast<float32>(m_panel_width) * m_config.char_width;
+
     int32 width, height;
     glfwGetWindowSize(m_window, &width, &height);
     m_layout_rect =
         rect2<float32>{
-            {0.f, 0.f},
-            vector2<float32>{static_cast<float32>(width), static_cast<float32>(height)} / m_dpi_scale,
+            {panel_width, 0.f},
+            vector2<float32>{
+                static_cast<float32>(width) - panel_width * m_dpi_scale, static_cast<float32>(height)} /
+                m_dpi_scale,
         }
             .inflate(-m_config.outer_padding);
 
