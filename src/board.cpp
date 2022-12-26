@@ -85,6 +85,7 @@ board& board::create() {
     });
 
     glfwMakeContextCurrent(m_window);
+    glfwSwapInterval(1);
 
     glewExperimental = GL_TRUE;
     glewInit();

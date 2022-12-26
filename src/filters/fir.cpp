@@ -2,6 +2,7 @@
 
 #include "space.h"
 #include "widget.h"
+#include "sbfft.h"
 
 #include <algorithm>
 #include <miniaudio.h>

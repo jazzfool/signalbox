@@ -58,7 +58,13 @@ FetchContent_Declare(
     GIT_TAG 9217a86f6bc2ed9fcdd20775aaaafab856ff98e2 # latest
 )
 
-FetchContent_MakeAvailable(glfw nanovg spdlog glew glm freetype miniaudio SPSCQueue RingBuffer)
+FetchContent_Declare(
+    muFFT
+    GIT_REPOSITORY https://github.com/Themaister/muFFT.git
+    GIT_TAG 47bb08652eab399c2c7d460abe5184857110f130 # latest
+)
+
+FetchContent_MakeAvailable(glfw nanovg spdlog glew glm freetype miniaudio SPSCQueue RingBuffer muFFT)
 
 add_library(nanovg)
 target_sources(nanovg PRIVATE ${CMAKE_BINARY_DIR}/_deps/nanovg-src/src/nanovg.c)

@@ -17,7 +17,7 @@ filter_executor::filter_executor(filter_list& filters) : out_status{8}, m_filter
 
     capture_l_chan.store(0);
     capture_r_chan.store(1);
-    capture_mute.store(false);
+    capture_mute.store(true);
 
     playback_dev_idx = 0;
     capture_dev_idx = 0;
@@ -36,6 +36,8 @@ void filter_executor::create() {
     m_playback_dev_names.reserve(playback_dev_count);
     m_playback_dev_ids.reserve(playback_dev_count);
     for (uint32 i = 0; i < playback_dev_count; ++i) {
+        if (playback_devs[i].isDefault)
+            playback_dev_idx = i;
         m_playback_dev_names.emplace_back(playback_devs[i].name);
         m_playback_dev_ids.push_back(playback_devs[i].id);
     }
@@ -43,6 +45,8 @@ void filter_executor::create() {
     m_capture_dev_names.reserve(capture_dev_count);
     m_capture_dev_ids.reserve(capture_dev_count);
     for (uint32 i = 0; i < capture_dev_count; ++i) {
+        if (capture_devs[i].isDefault)
+            capture_dev_idx = i;
         m_capture_dev_names.emplace_back(capture_devs[i].name);
         m_capture_dev_ids.push_back(capture_devs[i].id);
     }
