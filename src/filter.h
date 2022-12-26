@@ -25,7 +25,7 @@ struct fd_chans_out {
 
 template <uint32 N, typename = std::enable_if_t<(N > 0)>>
 struct fd_chan_in : fd_chans_in {
-    std::array<uint8, N> chan_in = std::array<uint8, N>::fill(0);
+    std::array<uint8, N> chan_in = fill_array<uint8, N>(0);
 
     std::span<uint8> chans_in() override {
         return chan_in;
@@ -63,7 +63,7 @@ struct fd_chan_vec_in : fd_chans_in {
 
 template <uint32 N>
 struct fd_chan_out : fd_chans_out {
-    std::array<uint8, N> chan_out = std::array<uint8, N>::fill(0);
+    std::array<uint8, N> chan_out = fill_array<uint8, N>(0);
 
     std::span<uint8> chans_out() override {
         return chan_out;

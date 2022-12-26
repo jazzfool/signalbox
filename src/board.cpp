@@ -13,6 +13,7 @@
 #include <spdlog/spdlog.h>
 
 board::board() : m_filter_executor{m_filters} {
+    m_focus = nullptr;
     m_frame0 = true;
     m_max_layout_height = 0.f;
     m_executor_status = "INACTIVE";
@@ -212,7 +213,7 @@ void board::add_filter(std::unique_ptr<filter_base>&& filter) {
         if (chan_out) {
             for (auto& c : chan_out->chans_out()) {
                 c = max += (uint8)(b);
-                b = false;
+                b = true;
                 max = std::min(max, uint8{99});
             }
         }
@@ -288,31 +289,64 @@ void board::draw_frame() {
     {
         m_filter_executor.out_status.remove(&m_executor_status);
 
-        auto out_l_chan = m_filter_executor.out_l_chan.load();
-        auto out_r_chan = m_filter_executor.out_r_chan.load();
-        const auto muted = m_filter_executor.out_mute.load();
+        auto playback_l_chan = m_filter_executor.playback_l_chan.load();
+        auto playback_r_chan = m_filter_executor.playback_r_chan.load();
+        const auto playback_muted = m_filter_executor.playback_mute.load();
+
+        auto capture_l_chan = m_filter_executor.capture_l_chan.load();
+        auto capture_r_chan = m_filter_executor.capture_r_chan.load();
+        const auto capture_muted = m_filter_executor.capture_mute.load();
 
         auto s =
-            make_spacef({m_layout_rect.size.x, m_config.line_height * 2.f + 2.f * m_config.inner_padding});
+            make_spacef({m_layout_rect.size.x, m_config.line_height * 3.f + 2.f * m_config.inner_padding});
         s.begin();
         s.set_bold(true);
         s.write(m_executor_status);
         s.set_bold(false);
         s.set_rtl(true);
-        if (s.write_button(muted ? "Unmute" : "Mute")) {
-            m_filter_executor.out_mute.store(!m_filter_executor.out_mute.load());
-            m_filter_executor.out_mute.store(!muted); // not atomic but other threads will only read
+        if (s.write_button("Reload")) {
+            m_filter_executor.reload_device();
         }
-        s.set_rtl(false);
+
         s.next_line();
-        s.write("Channel Left OUT: ");
-        ui_chan_sel(s, out_l_chan);
-        s.write(" Channel Right OUT: ");
-        ui_chan_sel(s, out_r_chan);
+        s.set_rtl(false);
+        s.set_bold(true);
+        s.write("PLAYBACK ");
+        s.set_bold(false);
+        ui_enum_sel(s, m_filter_executor.playback_devs(), m_filter_executor.playback_dev_idx);
+        s.set_rtl(true);
+        if (s.write_button(playback_muted ? "Unmute" : "Mute")) {
+            m_filter_executor.playback_mute.store(
+                !playback_muted); // not atomic negation but other threads will only read
+        }
+        s.write(" ");
+        ui_chan_sel(s, playback_r_chan);
+        s.write(" Right IN ");
+        ui_chan_sel(s, playback_l_chan);
+        s.write("Left IN ");
+
+        s.next_line();
+        s.set_rtl(false);
+        s.set_bold(true);
+        s.write("CAPTURE ");
+        s.set_bold(false);
+        ui_enum_sel(s, m_filter_executor.capture_devs(), m_filter_executor.capture_dev_idx);
+        s.set_rtl(true);
+        if (s.write_button(capture_muted ? "Unmute" : "Mute")) {
+            m_filter_executor.capture_mute.store(!capture_muted);
+        }
+        s.write(" ");
+        ui_chan_sel(s, capture_r_chan);
+        s.write(" Right OUT ");
+        ui_chan_sel(s, capture_l_chan);
+        s.write("Left OUT ");
+
         s.end();
 
-        m_filter_executor.out_l_chan.store(out_l_chan);
-        m_filter_executor.out_r_chan.store(out_r_chan);
+        m_filter_executor.playback_l_chan.store(playback_l_chan);
+        m_filter_executor.playback_r_chan.store(playback_r_chan);
+        m_filter_executor.capture_l_chan.store(capture_l_chan);
+        m_filter_executor.capture_r_chan.store(capture_r_chan);
     }
 
     auto swapped = std::optional<std::array<decltype(m_filters.filters)::iterator, 2>>{};

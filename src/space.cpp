@@ -5,8 +5,9 @@
 #include <glm/mat3x3.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
-space::space(GLFWwindow* window, NVGcontext* nvg, void*& focus, input_state input, board_config config,
-             rect2<float32> rect)
+space::space(
+    GLFWwindow* window, NVGcontext* nvg, void*& focus, input_state input, board_config config,
+    rect2<float32> rect)
     : focus{focus}, m_window{window}, m_nvg{nvg}, m_input{input}, m_config{config}, m_outer_rect{rect} {
     m_rect = m_outer_rect.inflate(-m_config.inner_padding);
     m_layout_cursor = m_rect.pos;
@@ -19,8 +20,8 @@ space::space(GLFWwindow* window, NVGcontext* nvg, void*& focus, input_state inpu
 
 void space::begin() {
     nvgSave(m_nvg);
-    nvgIntersectScissor(m_nvg, m_outer_rect.pos.x, m_outer_rect.pos.y, m_outer_rect.size.x,
-                        m_outer_rect.size.y);
+    nvgIntersectScissor(
+        m_nvg, m_outer_rect.pos.x, m_outer_rect.pos.y, m_outer_rect.size.x, m_outer_rect.size.y);
     nvgSave(m_nvg);
 }
 
@@ -30,8 +31,8 @@ void space::end() {
 
     nvgSave(m_nvg);
     nvgBeginPath(m_nvg);
-    nvgRoundedRect(m_nvg, m_outer_rect.pos.x, m_outer_rect.pos.y, m_outer_rect.size.x, m_outer_rect.size.y,
-                   4.f);
+    nvgRoundedRect(
+        m_nvg, m_outer_rect.pos.x, m_outer_rect.pos.y, m_outer_rect.size.x, m_outer_rect.size.y, 4.f);
     nvgStrokeColor(m_nvg, m_config.colors.frame);
     nvgStrokeWidth(m_nvg, 1.5f);
     nvgStroke(m_nvg);
@@ -104,8 +105,8 @@ bool space::write_hover(const std::string& s, NVGcolor bg, NVGcolor fg) {
 
     if (mouse_over) {
         nvgBeginPath(m_nvg);
-        nvgRoundedRect(m_nvg, bounds_rect.pos.x, m_layout_cursor.y, bounds_rect.size.x, m_config.line_height,
-                       2.f);
+        nvgRoundedRect(
+            m_nvg, bounds_rect.pos.x, m_layout_cursor.y, bounds_rect.size.x, m_config.line_height, 2.f);
         nvgFillColor(m_nvg, bg);
         nvgFill(m_nvg);
     }

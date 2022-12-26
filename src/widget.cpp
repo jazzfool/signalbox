@@ -13,7 +13,7 @@
 
 void ui_chan_btn(space& space, uint8& chan, bool inc) {
     space.set_color(space.config().colors.blue);
-    if (space.write_button(inc ? ">" : "<") && (inc ? chan < 99 : chan > 0)) {
+    if (space.write_button(inc ? ">" : "<") && (inc ? chan < MAX_CHANNELS : chan > 0)) {
         chan += ((int8)inc << 1) - 1;
     }
 }
@@ -34,6 +34,37 @@ void ui_chan_sel(space& space, uint8& chan) {
     }
 
     ui_chan_btn(space, chan, !rtl);
+
+    space.set_color(space.config().colors.fg);
+}
+
+void ui_enum_btn(space& space, uint32& i, uint32 size, bool inc) {
+    space.set_color(space.config().colors.blue);
+    if (space.write_button(inc ? ">" : "<") && (inc ? i < size - 1 : i > 0)) {
+        i += ((int8)inc << 1) - 1;
+    }
+}
+
+void ui_enum_sel(space& space, std::span<const std::string> options, uint32& i) {
+    const auto rtl = space.rtl();
+
+    auto max_sz = std::size_t{0};
+    for (const auto& s : options) {
+        max_sz = std::max(max_sz, s.size());
+    }
+
+    ui_enum_btn(space, i, options.size(), rtl);
+
+    space.set_color(space.config().colors.fg);
+    if (space.write_hover(options[i] + std::string(max_sz - options[i].size(), '.'), space.config().colors.hover, space.color())) {
+        const auto scroll = static_cast<uint8>(std::abs(space.input().scroll_wheel));
+        if (space.input().scroll_wheel > 0.f && i < options.size() - 1)
+            i += scroll;
+        else if (space.input().scroll_wheel < 0.f && i > 0)
+            i -= scroll;
+    }
+
+    ui_enum_btn(space, i, options.size(), !rtl);
 
     space.set_color(space.config().colors.fg);
 }
@@ -92,18 +123,25 @@ void ui_int(space& space, int32 step, uint8 pad, int32& x) {
     ui_int_ran(space, INT32_MIN, INT32_MAX, step, pad, x);
 }
 
-void ui_text_in(space& space, std::string& s, uint32 min_len) {
-    const auto bounds = space.measure(s);
+void ui_text_in(space& space, NVGcolor color, std::string& s, uint32 len) {
+    const auto str =
+        std::string{std::string_view{s.size() < len ? s + std::string(len - s.size(), ' ') : s}.substr(
+            space.focus == &s && s.size() > len ? s.size() - len : 0,
+            space.focus == &s ? std::string::npos : len)};
+    const auto bounds = space.measure(str);
 
     const auto nvg = space.nvg();
     if (space.focus == &s) {
         nvgBeginPath(nvg);
         nvgRoundedRect(nvg, bounds.pos.x, bounds.pos.y, bounds.size.x, bounds.size.y, 2.f);
-        nvgFillColor(nvg, nvgRGB(30, 30, 30));
+        nvgFillColor(nvg, space.config().colors.focus);
         nvgFill(nvg);
     }
 
-    const auto hover = space.write_hover(s, space.config().colors.hover, space.config().colors.fg);
+    space.set_color(color);
+    const auto hover = space.write_hover(
+        str, space.focus == &s ? space.config().colors.focus : space.config().colors.hover, color);
+    space.set_color(space.config().colors.fg);
 
     if (space.focus == &s) {
         if (space.input().text) {

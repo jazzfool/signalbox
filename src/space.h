@@ -10,7 +10,9 @@ struct NVGcontext;
 
 class space final {
   public:
-    space(GLFWwindow* window, NVGcontext* nvg, void*& focus, input_state input, board_config config, rect2<float32> rect);
+    space(
+        GLFWwindow* window, NVGcontext* nvg, void*& focus, input_state input, board_config config,
+        rect2<float32> rect);
 
     void begin();
     void end();

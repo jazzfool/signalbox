@@ -17,6 +17,7 @@ struct board_colors final {
     NVGcolor semifaint;
     NVGcolor faint;
     NVGcolor hover;
+    NVGcolor focus;
     NVGcolor red;
     NVGcolor green;
     NVGcolor blue;
@@ -24,6 +25,7 @@ struct board_colors final {
     NVGcolor meter_lo;
     NVGcolor meter_md;
     NVGcolor meter_hi;
+    NVGcolor media_control;
     std::unordered_map<filter_kind, NVGcolor> filters;
 
     static board_colors dark() {
@@ -34,6 +36,7 @@ struct board_colors final {
             .semifaint = nvgRGB(120, 120, 120),
             .faint = nvgRGB(50, 50, 50),
             .hover = nvgRGB(100, 100, 100),
+            .focus = nvgRGB(30, 30, 30),
             .red = nvgRGB(247, 47, 80),
             .green = nvgRGB(107, 255, 127),
             .blue = nvgRGB(76, 89, 252),
@@ -41,6 +44,7 @@ struct board_colors final {
             .meter_lo = nvgRGB(3, 252, 7),
             .meter_md = nvgRGB(246, 255, 0),
             .meter_hi = nvgRGB(255, 51, 0),
+            .media_control = nvgRGB(139, 232, 223),
             .filters =
                 {
                     {filter_kind::chn, nvgRGB(73, 148, 166)},

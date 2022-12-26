@@ -12,6 +12,7 @@ int main() {
     board{}
         .create()
         .register_filter(fltr_gen_sine)
+        .register_filter(fltr_gen_file)
         .register_filter(fltr_fir_delay)
         .register_filter(fltr_fir_gain)
         .register_filter(fltr_viz_waveform)

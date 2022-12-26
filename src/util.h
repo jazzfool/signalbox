@@ -6,6 +6,7 @@
 #include <limits>
 #include <cmath>
 #include <glm/vec2.hpp>
+#include <array>
 
 #define sb_ASSERT(x) assert((x))
 #define sb_ASSERT_EQ(x, y) assert(((x) == (y)))
@@ -63,14 +64,21 @@ inline bool float_eq(T a, T b) {
     return std::abs(a - b) < std::numeric_limits<T>::epsilon();
 }
 
-template<typename T>
+template <typename T>
 inline T clamp(T min, T max, T x) {
     return std::min(max, std::max(min, x));
 }
 
-template<typename T>
+template <typename T>
 inline T remap(T in_lo, T in_hi, T out_lo, T out_hi, T x) {
     return out_lo + (x - in_lo) * (out_hi - out_lo) / (in_hi - in_lo);
+}
+
+template <typename T, std::size_t N>
+constexpr auto fill_array(const T& value) -> std::array<T, N> {
+    std::array<T, N> ret;
+    ret.fill(value);
+    return ret;
 }
 
 struct none final {};
