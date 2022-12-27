@@ -8,5 +8,5 @@
 #include <vector>
 #include <span>
 
-simd_vec<std::complex<float32>> r2c_fft(std::span<const sample> samples);
-simd_vec<float32> c2r_ifft(std::span<const std::complex<float32>> c);
+simd_vec<std::complex<float32>> r2c_fft(simd_slice<const sample> samples, std::size_t pad = 0);
+simd_vec<float32> c2r_ifft(simd_slice<const std::complex<float32>> c);

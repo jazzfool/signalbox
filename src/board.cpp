@@ -392,6 +392,7 @@ void board::draw_frame() {
 
     // practically mutually exclusive anyway but eh
     if (deleted && !swapped) {
+        auto lock = std::lock_guard{m_filters.mut};
         m_filters.filters.erase(*deleted);
     }
 

@@ -18,6 +18,8 @@ int main() {
         .register_filter(fltr_fir_gain)
         .register_filter(fltr_tfm_fft)
         .register_filter(fltr_tfm_xcorrel)
+        .register_filter(fltr_tfm_hann_window)
+        .register_filter(fltr_tfm_sub)
         .register_filter(fltr_viz_waveform)
         .register_filter(fltr_viz_vu)
         .register_filter(fltr_chn_split)

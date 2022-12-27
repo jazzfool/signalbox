@@ -5,7 +5,22 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 project(Signalbox C CXX)
 
-file(GLOB_RECURSE Source src/*.cpp src/*.c)
+set(Source
+    src/board.cpp
+    src/impl.cpp
+    src/main.cpp
+    src/space.cpp
+    src/widget.cpp
+
+    src/filters/chn.cpp
+    src/filters/executor.cpp
+    src/filters/fir.cpp
+    src/filters/gen.cpp
+    src/filters/sbfft.cpp
+    src/filters/sse.c
+    src/filters/tfm.cpp
+    src/filters/viz.cpp
+)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native")
 
