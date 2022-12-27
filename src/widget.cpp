@@ -26,7 +26,7 @@ void ui_chan_sel(space& space, uint8& chan) {
     space.set_color(space.config().colors.fg);
     const auto s = fmt::format("{:02}", chan);
     if (space.write_hover(s, space.config().colors.hover, space.color())) {
-        const auto scroll = static_cast<uint8>(std::abs(space.input().scroll_wheel));
+        const auto scroll = clamp<uint8>(0, 1, static_cast<uint8>(std::abs(space.input().scroll_wheel)));
         if (space.input().scroll_wheel > 0.f && chan < MAX_CHANNELS)
             chan += scroll;
         else if (space.input().scroll_wheel < 0.f && chan > 0)

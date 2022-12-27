@@ -5,3 +5,4 @@
 #include <memory>
 
 std::unique_ptr<filter_base> fltr_tfm_fft();
+std::unique_ptr<filter_base> fltr_tfm_xcorrel();

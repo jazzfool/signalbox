@@ -64,7 +64,13 @@ FetchContent_Declare(
     GIT_TAG 47bb08652eab399c2c7d460abe5184857110f130 # latest
 )
 
-FetchContent_MakeAvailable(glfw nanovg spdlog glew glm freetype miniaudio SPSCQueue RingBuffer muFFT)
+FetchContent_Declare(
+    sse_mathfun
+    GIT_REPOSITORY https://github.com/RJVB/sse_mathfun.git
+    GIT_TAG 0f462645698320643decdb5f79d211733b2a97d6 # latest
+)
+
+FetchContent_MakeAvailable(glfw nanovg spdlog glew glm freetype miniaudio SPSCQueue RingBuffer muFFT sse_mathfun)
 
 add_library(nanovg)
 target_sources(nanovg PRIVATE ${CMAKE_BINARY_DIR}/_deps/nanovg-src/src/nanovg.c)
@@ -77,3 +83,6 @@ target_include_directories(miniaudio INTERFACE ${CMAKE_BINARY_DIR}/_deps/miniaud
 
 add_library(RingBuffer INTERFACE)
 target_include_directories(RingBuffer INTERFACE ${CMAKE_BINARY_DIR}/_deps/ringbuffer-src)
+
+add_library(sse_mathfun INTERFACE)
+target_include_directories(sse_mathfun INTERFACE ${CMAKE_BINARY_DIR}/_deps/sse_mathfun-src)

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "sample.h"
+#include "sse.h"
 
 #include <pmmintrin.h>
 
@@ -10,6 +11,9 @@
 #include <numeric>
 #include <span>
 #include <type_traits>
+
+#define _USE_MATH_DEFINES
+#include <math.h>
 
 static constexpr std::size_t SIMD_ALIGN = 16;
 
@@ -61,6 +65,14 @@ struct simd_v<float32, 1> final : simd_expr {
     simd_v(float32 v) : v{v} {
     }
 
+    static simd_v splat(float32 x) {
+        return simd_v{x};
+    }
+
+    static simd_v set(float32 x) {
+        return simd_v{x};
+    }
+
     simd_v operator-() const {
         return -v;
     }
@@ -88,7 +100,16 @@ struct simd_v<float32, 4> final : simd_expr {
 
     __m128 v;
 
-    simd_v(__m128 v) : v{v} {
+    simd_v(__m128 v = {}) : v{v} {
+    }
+
+    // !! x -> aligned !!
+    static simd_v load(const float32* x) {
+        return simd_v{_mm_load_ps(x)};
+    }
+
+    static simd_v set(float32 x0, float32 x1, float32 x2, float32 x3) {
+        return simd_v{_mm_setr_ps(x0, x1, x2, x3)};
     }
 
     static simd_v splat(float32 x) {
@@ -123,18 +144,28 @@ struct simd_v<float32, 4> final : simd_expr {
         sums = _mm_add_ss(sums, shuf);
         return _mm_cvtss_f32(sums);
     }
+
+    simd_v sin() const {
+        return simd_v{simd_sin(v)};
+    }
 };
 
 template <typename Out, typename Expr, std::size_t W = 4>
 void simd_process(Out&& out, Expr&& expr, std::size_t begin, std::size_t end) {
+    sb_ASSERT(simd_size(std::forward<Out>(out)) <= simd_size(std::forward<Expr>(expr)));
+
     auto i = std::size_t{begin};
 
     for (; i < end / W * W; i += W) {
-        simd_store(simd_width<W>{}, out, simd_load(simd_width<4>{}, expr, i), i);
+        simd_store(
+            simd_width<W>{}, std::forward<Out>(out), simd_load(simd_width<4>{}, std::forward<Expr>(expr), i),
+            i);
     }
 
     for (; i < end; ++i) {
-        simd_store(simd_width<1>{}, out, simd_load(simd_width<1>{}, expr, i), i);
+        simd_store(
+            simd_width<1>{}, std::forward<Out>(out), simd_load(simd_width<1>{}, std::forward<Expr>(expr), i),
+            i);
     }
 }
 
@@ -227,6 +258,39 @@ std::size_t simd_size(const simd_vec<T, N>& v) {
     return v.size();
 }
 
+template <typename T, std::size_t W>
+struct simd_const final : simd_expr {
+    static_assert(W > 0);
+
+    using element_type = T;
+    alignas(16) const std::array<T, W> values;
+    simd_v<float32, 4> v4;
+
+    simd_const(std::array<T, W>&& vs) : values{std::move(vs)} {
+        alignas(16) const float32 v4s[4] = {values[0 % W], values[1 % W], values[2 % W], values[3 % W]};
+        v4 = simd_v<float32, 4>::load(v4s);
+    }
+
+    simd_const(const T v) requires(W == 1) : values{fill_array<T, W>(v)} {
+        v4 = simd_v<float32, 4>::splat(v);
+    }
+};
+
+template <typename T, std::size_t W1, std::size_t W2>
+simd_v<float32, W1> simd_load(simd_width<W1>, const simd_const<T, W2>& c, std::size_t i) {
+    return simd_v<float32, W1>::splat(c.values[i % W2]);
+}
+
+template <typename T, std::size_t W>
+simd_v<float32, 4> simd_load(simd_width<4>, const simd_const<T, W>& c, std::size_t) {
+    return c.v4;
+}
+
+template <typename T, std::size_t W>
+std::size_t simd_size(const simd_const<T, W>&) {
+    return std::numeric_limits<std::size_t>::max();
+}
+
 template <typename A, typename B>
 struct simd_binary_expr : simd_expr {
     static_assert(std::is_same_v<typename A::element_type, typename B::element_type>);
@@ -279,4 +343,68 @@ auto simd_sum(Expr&& expr) {
         f += simd_load(simd_width<1>{}, expr, x).v;
     }
     return f;
+}
+
+template <typename T>
+struct simd_range_expr final : simd_expr {
+    using element_type = typename T;
+    const std::size_t size;
+    const T inv_size;
+    const T start;
+    const T stop;
+    const T dist;
+    simd_range_expr(T start, T stop, std::size_t size)
+        : size{size}, inv_size{static_cast<T>(1) / static_cast<T>(size)}, start{start}, stop{stop},
+          dist{stop - start} {
+    }
+};
+
+template <typename T>
+auto simd_range(T start, T stop, std::size_t size) {
+    return simd_range_expr<T>{start, stop, size};
+}
+
+template <typename T, std::size_t W>
+auto simd_load(simd_width<W>, const simd_range_expr<T>& expr, std::size_t i) {
+    return simd_load<T, W>(simd_width<W>{}, expr, i, std::make_index_sequence<W>::value);
+}
+
+template <typename T, std::size_t W, std::size_t... I, typename = std::enable_if_t<(sizeof...(I) == W)>>
+auto simd_load(simd_width<W>, const simd_range_expr<T>& expr, std::size_t i, std::index_sequence<I...>) {
+    return simd_v<T, W>::set((expr.start + static_cast<T>(I + i) * expr.inv_size * expr.dist)...);
+}
+
+template <typename T>
+std::size_t simd_size(const simd_range_expr<T>& expr) {
+    return expr.size;
+}
+
+template <typename T>
+struct simd_window_expr : simd_expr {
+    const simd_range_expr<T> range;
+    simd_window_expr(T start, T stop, std::size_t size) : range{start, stop, size} {
+    }
+};
+
+template <typename T>
+std::size_t simd_size(const simd_window_expr<T>& expr) {
+    return simd_size(expr.range);
+}
+
+template <typename T>
+struct simd_hann_window_expr final : simd_window_expr<T> {
+    using simd_window_expr<T>::simd_window_expr;
+};
+
+template <typename T>
+auto simd_hann_window(T start, T stop, std::size_t size) {
+    return simd_hann_window_expr{start, stop, size};
+}
+
+template <typename T, std::size_t W>
+auto simd_load(simd_width<W> w, const simd_hann_window_expr<T>& expr, std::size_t i) {
+    static auto _0_5 = simd_const<T, W>::splat(static_cast<T>(0.5f));
+    static auto _1_0 = simd_const<T, W>::splat(static_cast<T>(1.f));
+    static auto _2_pi = simd_const<T, W>::splat(static_cast<T>(M_PI * 2.0));
+    return _0_5 * (_1_0 - cos_ps(_2_pi * simd_load(w, expr.range, i)));
 }

@@ -102,8 +102,7 @@ std::unique_ptr<filter_base> fltr_fir_gain() {
             auto& out = chans.chans[d.chan_out].samples;
             out.resize(in.size(), 0.f);
             const auto gain = ma_volume_db_to_linear(d.gain_db);
-            std::transform(
-                in.begin(), in.end(), out.begin(), [gain](sample s) -> sample { return s * gain; });
+            out = in * simd_const<float32, 1>{gain};
             return {};
         },
     };
