@@ -3,8 +3,6 @@
 #include "sample.h"
 #include "sse.h"
 
-#include <immintrin.h>
-
 #include <vector>
 #include <variant>
 #include <cstdlib>
@@ -49,6 +47,16 @@ class simd_allocator {
     }
 };
 
+template<typename T, typename U>
+bool operator==(const simd_allocator<T>&, const simd_allocator<U>&) {
+    return true;
+}
+
+template<typename T, typename U>
+bool operator!=(const simd_allocator<T>&, const simd_allocator<U>&) {
+    return false;
+}
+
 template <typename T>
 struct simd_real_to_complex final {
     using type = std::complex<T>;
@@ -91,13 +99,13 @@ struct simd_vec final : std::array<T, N> {
     using std::array<T, N>::array;
 
     simd_slice<T> slice(std::size_t offset, std::size_t count) {
-        sb_ASSERT(count <= size() - offset);
-        return simd_slice<T>{data() + offset, count};
+        sb_ASSERT(count <= this->size() - offset);
+        return simd_slice<T>{this->data() + offset, count};
     }
 
     simd_slice<const T> slice(std::size_t offset, std::size_t count) const {
-        sb_ASSERT(count <= size() - offset);
-        return simd_slice<T>{data() + offset, count};
+        sb_ASSERT(count <= this->size() - offset);
+        return simd_slice<T>{this->data() + offset, count};
     }
 
     simd_slice<T> whole() {

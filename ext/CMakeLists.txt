@@ -70,7 +70,13 @@ FetchContent_Declare(
     GIT_TAG 0f462645698320643decdb5f79d211733b2a97d6 # latest
 )
 
-FetchContent_MakeAvailable(glfw nanovg spdlog glew glm freetype miniaudio SPSCQueue RingBuffer muFFT sse_mathfun)
+FetchContent_Declare(
+    sse2neon
+    GIT_REPOSITORY https://github.com/DLTcollab/sse2neon.git
+    GIT_TAG 31cb30b1f93256d7aa19bfbaf4558c1d35e9b3ba
+)
+
+FetchContent_MakeAvailable(glfw nanovg spdlog glew glm freetype miniaudio SPSCQueue RingBuffer muFFT sse_mathfun sse2neon)
 
 add_library(nanovg)
 target_sources(nanovg PRIVATE ${CMAKE_BINARY_DIR}/_deps/nanovg-src/src/nanovg.c)
@@ -86,3 +92,6 @@ target_include_directories(RingBuffer INTERFACE ${CMAKE_BINARY_DIR}/_deps/ringbu
 
 add_library(sse_mathfun INTERFACE)
 target_include_directories(sse_mathfun INTERFACE ${CMAKE_BINARY_DIR}/_deps/sse_mathfun-src)
+
+add_library(sse2neon INTERFACE)
+target_include_directories(sse2neon INTERFACE ${CMAKE_BINARY_DIR}/_deps/sse2neon-src)

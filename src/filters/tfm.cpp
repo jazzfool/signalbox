@@ -240,11 +240,13 @@ std::unique_ptr<filter_base> fltr_tfm_hann_window() {
             const auto sz_inv = 1.f / static_cast<float32>(in.size() - 1);
             const auto _sz_inv = _mm_set1_ps(sz_inv);
             auto i = size_t{0};
+            /*
             for (; i < in.size() / 4 * 4; i += 4) {
                 const auto is = _mm_mul_ps(_mm_setr_ps(i, i + 1, i + 2, i + 3), _sz_inv);
                 const auto window = _mm_mul_ps(_0_5, _mm_sub_ps(_1_0, simd_cos(_mm_mul_ps(_2_pi, is))));
                 _mm_store_ps(&out[i], _mm_mul_ps(_mm_load_ps(&in[i]), window));
             }
+            */
             for (; i < in.size(); ++i) {
                 const auto window = 0.5f * (1.f - std::cos(2.f * M_PI * (static_cast<float32>(i) * sz_inv)));
                 out[i] = in[i] * window;

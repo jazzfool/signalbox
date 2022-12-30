@@ -4,6 +4,8 @@
 #include "space.h"
 #include "executor.h"
 
+#include <float.h>
+
 std::unique_ptr<filter_base> fltr_viz_waveform() {
     struct data : fd_chan_in<1> {
         float32 scale = 1.f;
