@@ -11,8 +11,8 @@ struct NVGcontext;
 class space final {
   public:
     space(
-        GLFWwindow* window, NVGcontext* nvg, void*& focus, input_state input, board_config config,
-        rect2<float32> rect);
+        GLFWwindow* window, NVGcontext* nvg, void*& focus, bool& did_focus, input_state input,
+        board_config config, rect2<float32> rect);
 
     void begin();
     void end();
@@ -40,6 +40,7 @@ class space final {
     void set_bold(bool bold);
 
     void*& focus;
+    bool& did_focus;
 
   private:
     float32 advance_layout_x(float32 x);

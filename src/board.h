@@ -9,6 +9,7 @@
 #include <vector>
 #include <array>
 #include <memory>
+#include <map>
 
 struct GLFWwindow;
 
@@ -31,7 +32,6 @@ class board final {
     struct filter_info final {
         filter_fn fn;
         std::string name;
-        filter_kind kind;
         std::string in;
         std::string out;
     };
@@ -55,8 +55,11 @@ class board final {
 
     input_state m_input;
     void* m_focus;
+    bool m_did_focus;
 
-    std::vector<filter_info> m_all_filters;
+    std::string m_filter_search;
+    std::map<filter_kind, std::vector<filter_info>> m_all_filters;
+    size_t m_filter_count;
     filter_executor m_filter_executor;
     filter_list m_filters;
     std::string m_executor_status;

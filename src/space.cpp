@@ -6,9 +6,10 @@
 #include <glm/gtc/type_ptr.hpp>
 
 space::space(
-    GLFWwindow* window, NVGcontext* nvg, void*& focus, input_state input, board_config config,
-    rect2<float32> rect)
-    : focus{focus}, m_window{window}, m_nvg{nvg}, m_input{input}, m_config{config}, m_outer_rect{rect} {
+    GLFWwindow* window, NVGcontext* nvg, void*& focus, bool& did_focus, input_state input,
+    board_config config, rect2<float32> rect)
+    : focus{focus}, did_focus{did_focus}, m_window{window}, m_nvg{nvg}, m_input{input}, m_config{config},
+      m_outer_rect{rect} {
     m_rect = m_outer_rect.inflate(-m_config.inner_padding);
     m_layout_cursor = m_rect.pos;
     m_available_width = m_rect.size.x;

@@ -81,7 +81,7 @@ struct fd_chan_out<1> : fd_chans_out {
     std::span<uint8> chans_out() override {
         return {&chan_out, 1};
     }
-    
+
     bool chans_out_is_dynamic() override {
         return false;
     }
@@ -93,18 +93,27 @@ struct fd_chan_vec_out : fd_chans_out {
     std::span<uint8> chans_out() override {
         return chan_out;
     }
-    
+
     bool chans_out_is_dynamic() override {
         return true;
     }
 };
 
-enum class filter_kind { chn, gen, viz, fir, iir, misc };
+enum class filter_kind { chn, gen, viz, fir, iir, misc, _max };
+
+static constexpr const char* filter_kind_names[(size_t)filter_kind::_max] = {
+    "Channel",
+    "Generation",
+    "Visualization",
+    "FIR",
+    "IIR",
+    "Miscellaneous"
+};
 
 struct filter_base {
     virtual ~filter_base() {
     }
-    
+
     virtual const std::string& name() const = 0;
     virtual filter_kind kind() const = 0;
 
@@ -212,4 +221,4 @@ struct virtual_filter final {
     std::unique_ptr<filter_base> filter;
 };
 
-using filter_fn = std::unique_ptr<filter_base>(*)();
+using filter_fn = std::unique_ptr<filter_base> (*)();

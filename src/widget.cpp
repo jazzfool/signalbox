@@ -158,6 +158,7 @@ void ui_text_in(space& space, NVGcolor color, std::string& s, uint32 len) {
         }
     } else if (hover && space.input().mouse_just_pressed[0]) {
         space.focus = &s;
+        space.did_focus = true;
         s.clear();
     }
 }

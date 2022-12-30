@@ -7,6 +7,9 @@
 #include <cmath>
 #include <glm/vec2.hpp>
 #include <array>
+#include <string_view>
+#include <vector>
+#include <cctype>
 
 #define sb_ASSERT(x) assert((x))
 #define sb_ASSERT_EQ(x, y) assert(((x) == (y)))
@@ -82,3 +85,23 @@ constexpr auto fill_array(const T& value) -> std::array<T, N> {
 }
 
 struct none final {};
+
+inline uint32 str_distance(std::string_view a, std::string_view b) {
+    // levenshtein
+    const auto sz_a = a.size() + 1;
+    const auto sz_b = b.size() + 1;
+    const auto sz = sz_a * sz_b;
+    auto dists = std::vector<uint32>{};
+    dists.resize(sz, 0);
+    for (auto i = size_t{0}; i < sz; ++i) {
+        const auto i_a = i % sz_a;
+        const auto i_b = i / sz_a;
+        if (i_a == 0 || i_b == 0) {
+            dists[i] = i_a + i_b;
+            continue;
+        }
+        const auto cost = static_cast<uint32>(std::tolower(a[i_a - 1]) != std::tolower(b[i_b - 1]));
+        dists[i] = std::min(std::min(dists[i - sz_a] + 1, dists[i - 1] + 1), dists[i - sz_a - 1] + cost);
+    }
+    return dists.back();
+}

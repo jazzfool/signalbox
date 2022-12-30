@@ -11,9 +11,11 @@
 #include <nanovg_gl.h>
 
 #include <spdlog/spdlog.h>
+#include <map>
 
 board::board() : m_filter_executor{m_filters} {
     m_focus = nullptr;
+    m_did_focus = false;
     m_frame0 = true;
     m_max_layout_height = 0.f;
     m_executor_status = "INACTIVE";
@@ -85,17 +87,17 @@ board& board::create() {
     });
 
     glfwMakeContextCurrent(m_window);
-    glfwSwapInterval(1);
+    glfwSwapInterval(0);
 
     glewExperimental = GL_TRUE;
     glewInit();
 
     m_nvg = nvgCreateGL3(NVG_STENCIL_STROKES);
 
-    m_config.font_size = 14.f;
+    m_config.font_size = 12.f;
 
-    nvgCreateFont(m_nvg, "mono", "data/CourierPrime-Regular.ttf");
-    nvgCreateFont(m_nvg, "monoB", "data/CourierPrime-Bold.ttf");
+    nvgCreateFont(m_nvg, "mono", "data/iosevka-fixed-slab-extended.ttf");
+    nvgCreateFont(m_nvg, "monoB", "data/iosevka-fixed-slab-extendedbold.ttf");
 
     nvgFontFace(m_nvg, "mono");
     nvgFontSize(m_nvg, m_config.font_size);
@@ -161,7 +163,6 @@ board& board::register_filter(filter_fn fn) {
     auto info = filter_info{};
     info.fn = fn;
     info.name = dummy->name();
-    info.kind = dummy->kind();
 
     const auto fd_in = dummy->data_chans_in();
     const auto fd_out = dummy->data_chans_out();
@@ -172,7 +173,7 @@ board& board::register_filter(filter_fn fn) {
                    ? fd_out->chans_out_is_dynamic() ? "**" : fmt::format("{:02}", fd_out->chans_out().size())
                    : "..";
 
-    m_all_filters.push_back(std::move(info));
+    m_all_filters[dummy->kind()].push_back(std::move(info));
 
     return *this;
 }
@@ -221,10 +222,11 @@ void board::add_filter(std::unique_ptr<filter_base>&& filter) {
     }
 
     m_filters.filters.push_back(std::move(filter));
+    ++m_filter_count;
 }
 
 space board::new_spacef(const rect2<float32>& rect) {
-    return space{m_window, m_nvg, m_focus, m_input, m_config, rect};
+    return space{m_window, m_nvg, m_focus, m_did_focus, m_input, m_config, rect};
 }
 
 void board::draw_frame() {
@@ -255,8 +257,6 @@ void board::draw_frame() {
     reset_layout();
 
     {
-        auto pushed = std::optional<decltype(m_all_filters)::iterator>{};
-
         auto s = new_spacef(rect2<float32>{
             {0.f, 0.f},
             {static_cast<float32>(m_panel_width) * m_config.char_width + m_config.outer_padding,
@@ -265,12 +265,19 @@ void board::draw_frame() {
 
         s.begin();
         s.set_bold(true);
+        s.set_color(m_config.colors.fg);
         s.write("FILTERS");
         s.next_line();
         s.set_bold(false);
-        for (auto it = m_all_filters.begin(); it != m_all_filters.end(); ++it) {
+        ui_text_in(s, m_config.colors.fg, m_filter_search, m_panel_width - 2);
+        s.next_line();
+
+        using filter_iterator = std::vector<filter_info>::iterator;
+        auto pushed = std::optional<filter_iterator>{};
+
+        const auto draw_one_filter = [&](filter_kind kind, filter_iterator it) {
+            s.set_color(m_config.colors.filters[kind]);
             s.set_rtl(false);
-            s.set_color(m_config.colors.filters[it->kind]);
             if (s.write_button(it->name)) {
                 pushed = it;
             }
@@ -279,7 +286,35 @@ void board::draw_frame() {
             s.write(fmt::format("{}->{}", it->in, it->out));
             s.set_color(m_config.colors.fg);
             s.next_line();
+        };
+
+        if (m_filter_search.empty()) {
+            for (auto& [kind, filters] : m_all_filters) {
+                s.set_rtl(false);
+                s.set_color(m_config.colors.fg);
+                s.write(filter_kind_names[(size_t)kind]);
+                s.next_line();
+
+                for (auto it = filters.begin(); it != filters.end(); ++it) {
+                    draw_one_filter(kind, it);
+                }
+            }
+        } else {
+            auto dists = std::vector<std::tuple<uint32, filter_kind, filter_iterator>>{};
+            dists.reserve(m_filter_count);
+            for (auto& [kind, filters] : m_all_filters) {
+                for (auto it = filters.begin(); it != filters.end(); ++it) {
+                    const auto dist = str_distance(it->name, m_filter_search);
+                    dists.push_back(std::make_tuple(dist, kind, it));
+                }
+            }
+            std::sort(
+                dists.begin(), dists.end(), [](const auto& a, const auto& b) { return std::get<0>(a) < std::get<0>(b); });
+            for (auto& [dist, kind, it] : dists) {
+                draw_one_filter(kind, it);
+            }
         }
+
         s.end();
 
         if (pushed) {
@@ -401,12 +436,17 @@ void board::draw_frame() {
         std::iter_swap((*swapped)[0], (*swapped)[1]);
     }
 
+    if (!m_did_focus && m_input.mouse_just_pressed[0]) {
+        m_focus = nullptr;
+    }
+
     nvgEndFrame(m_nvg);
 
     m_input.keys_just_pressed.fill(false);
     m_input.mouse_just_pressed = {false, false, false};
     m_input.scroll_wheel = 0.f;
     m_input.text.reset();
+    m_did_focus = false;
 
     glfwSwapBuffers(m_window);
 }
