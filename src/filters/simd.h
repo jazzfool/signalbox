@@ -3,7 +3,7 @@
 #include "sample.h"
 #include "sse.h"
 
-#include <pmmintrin.h>
+#include <immintrin.h>
 
 #include <vector>
 #include <variant>
@@ -49,171 +49,34 @@ class simd_allocator {
     }
 };
 
-struct simd_expr {};
-
-template <typename... Ts>
-using simd_enable_expr_t = std::enable_if_t<(std::is_base_of_v<simd_expr, std::remove_cvref_t<Ts>> && ...)>;
-
-template <typename T, std::size_t W>
-struct simd_v;
-
-template <std::size_t W>
-struct simd_v<float32, W> final {
-    using element_type = float32;
-
-    std::array<float32, W> v;
-
-    simd_v(std::array<float32, W> v) : v{v} {
-    }
-
-    static simd_v load(const float32* x) {
-        return simd_v::load(x, std::make_index_sequence<W>{});
-    }
-
-    template <std::size_t... I>
-    static simd_v load(const float32* x, std::index_sequence<I...>) {
-        return simd_v::load((x[I])...);
-    }
-
-    template <typename... Ts, typename = std::enable_if_t<(sizeof...(Ts) == W)>>
-    static simd_v set(Ts... xs) {
-        return simd_v{std::array<float32, W>{xs...}};
-    }
-
-    static simd_v splat(float32 x) {
-        auto x = simd_v{};
-        x.v.fill(x);
-        return x;
-    }
-
-    simd_v operator-() const {
-        return -v;
-    }
-
-    simd_v operator+(const simd_v& rhs) const {
-        return v + rhs.v;
-    }
-
-    simd_v operator-(const simd_v& rhs) const {
-        return v - rhs.v;
-    }
-
-    simd_v operator*(const simd_v& rhs) const {
-        return v * rhs.v;
-    }
-
-    simd_v operator/(const simd_v& rhs) const {
-        return v / rhs.v;
-    }
-
-    float32 sum() const {
-        return std::accumulate(v.begin(), ve.end(), 0.f);
-    }
-
-    simd_v sin() const {
-        return std::sin(v);
-    }
-
-    simd_v cos() const {
-        return std::cos(v);
-    }
-};
-
-template <>
-struct simd_v<float32, 4> final : simd_expr {
-    using element_type = float32;
-
-    __m128 v;
-
-    simd_v(__m128 v = {}) : v{v} {
-    }
-
-    // !! x -> aligned !!
-    static simd_v load(const float32* x) {
-        return simd_v{_mm_load_ps(x)};
-    }
-
-    static simd_v set(float32 x0, float32 x1, float32 x2, float32 x3) {
-        return simd_v{_mm_setr_ps(x0, x1, x2, x3)};
-    }
-
-    static simd_v splat(float32 x) {
-        return simd_v{_mm_set1_ps(x)};
-    }
-
-    simd_v operator-() const {
-        return _mm_sub_ps(splat(0.f).v, v);
-    }
-
-    simd_v operator+(const simd_v& rhs) const {
-        return _mm_add_ps(v, rhs.v);
-    }
-
-    simd_v operator-(const simd_v& rhs) const {
-        return _mm_sub_ps(v, rhs.v);
-    }
-
-    simd_v operator*(const simd_v& rhs) const {
-        return _mm_mul_ps(v, rhs.v);
-    }
-
-    simd_v operator/(const simd_v& rhs) const {
-        return _mm_div_ps(v, rhs.v);
-    }
-
-    float32 sum() const {
-        // https://stackoverflow.com/a/35270026
-        auto shuf = _mm_movehdup_ps(v);
-        auto sums = _mm_add_ps(v, shuf);
-        shuf = _mm_movehl_ps(shuf, sums);
-        sums = _mm_add_ss(sums, shuf);
-        return _mm_cvtss_f32(sums);
-    }
-
-    simd_v sin() const {
-        return simd_v{simd_sin(v)};
-    }
-
-    simd_v cos() const {
-        return simd_v{simd_cos(v)};
-    }
-
-    simd_v shuf() const {
-        return simd_v{_mm_shuffle_ps()}
-    }
-};
-
-template <typename Out, typename Expr, std::size_t W = 4, std::size_t We = Expr::min_w>
-void simd_process(Out&& out, Expr&& expr, std::size_t begin, std::size_t end) {
-    sb_ASSERT(simd_size(std::forward<Out>(out)) <= simd_size(std::forward<Expr>(expr)));
-
-    auto i = std::size_t{begin};
-
-    for (; i < end / W * W; i += W) {
-        simd_store(
-            simd_width<W>{}, std::forward<Out>(out), simd_load(simd_width<4>{}, std::forward<Expr>(expr), i),
-            i);
-    }
-
-    for (; i < end / We * We; i += We) {
-        simd_store(
-            simd_width<We>{}, std::forward<Out>(out), simd_load(simd_width<1>{}, std::forward<Expr>(expr), i),
-            i);
-    }
-}
-
 template <typename T>
-struct simd_complex final {
+struct simd_real_to_complex final {
     using type = std::complex<T>;
 };
 
 template <typename T>
-struct simd_complex<const T> final {
+struct simd_real_to_complex<const T> final {
     using type = const std::complex<T>;
 };
 
 template <typename T>
-using simd_complex_t = typename simd_complex<T>::type;
+using simd_real_to_complex_t = typename simd_real_to_complex<T>::type;
+
+template <typename T>
+struct simd_complex_to_real final {};
+
+template <typename T>
+struct simd_complex_to_real<std::complex<T>> final {
+    using type = T;
+};
+
+template <typename T>
+struct simd_complex_to_real<const std::complex<T>> final {
+    using type = const T;
+};
+
+template <typename T>
+using simd_complex_to_real_t = typename simd_complex_to_real<T>::type;
 
 static constexpr std::size_t SIMD_VEC_DYNAMIC = std::numeric_limits<std::size_t>::max();
 
@@ -224,16 +87,8 @@ template <typename T>
 using simd_slice = simd_vec<T, 0>;
 
 template <typename T, std::size_t N>
-struct simd_vec final : simd_expr, std::array<T, N> {
+struct simd_vec final : std::array<T, N> {
     using std::array<T, N>::array;
-    using element_type = T;
-    static constexpr std::size_t min_w = 1;
-
-    template <typename Expr, typename = simd_enable_expr_t<Expr>>
-    simd_vec& operator=(Expr&& expr) {
-        simd_process(*this, std::forward<Expr>(expr), 0, size());
-        return *this;
-    }
 
     simd_slice<T> slice(std::size_t offset, std::size_t count) {
         sb_ASSERT(count <= size() - offset);
@@ -244,25 +99,19 @@ struct simd_vec final : simd_expr, std::array<T, N> {
         sb_ASSERT(count <= size() - offset);
         return simd_slice<T>{data() + offset, count};
     }
+
+    simd_slice<T> whole() {
+        return slice(0, this->size());
+    }
+
+    simd_slice<const T> whole() const {
+        return slice(0, this->size());
+    }
 };
 
 template <typename T>
-struct simd_vec<T, SIMD_VEC_DYNAMIC> final : simd_expr, std::vector<T, simd_allocator<T>> {
+struct simd_vec<T, SIMD_VEC_DYNAMIC> final : std::vector<T, simd_allocator<T>> {
     using std::vector<T, simd_allocator<T>>::vector;
-    using element_type = T;
-    static constexpr std::size_t min_w = 1;
-
-    template <typename Expr, typename = simd_enable_expr_t<Expr>>
-    simd_vec(Expr&& expr) {
-        this->resize(simd_size(expr));
-        *this = expr;
-    }
-
-    template <typename Expr, typename = simd_enable_expr_t<Expr>>
-    simd_vec& operator=(Expr&& expr) {
-        simd_process(*this, std::forward<Expr>(expr), 0, this->size());
-        return *this;
-    }
 
     simd_slice<T> slice(std::size_t offset, std::size_t count) {
         sb_ASSERT(count <= this->size() - offset);
@@ -274,257 +123,63 @@ struct simd_vec<T, SIMD_VEC_DYNAMIC> final : simd_expr, std::vector<T, simd_allo
         return simd_slice<const T>{this->data() + offset, count};
     }
 
-    simd_slice<T> slice() {
+    simd_slice<T> whole() {
         return slice(0, this->size());
     }
 
-    simd_slice<const T> slice() const {
+    simd_slice<const T> whole() const {
         return slice(0, this->size());
     }
 };
 
 template <typename T>
-struct simd_vec<T, 0> final : simd_expr, std::span<T> {
+struct simd_vec<T, 0> final : std::span<T> {
     using std::span<T>::span;
-    using element_type = T;
-    static constexpr std::size_t min_w = 1;
 
-    template <typename Expr, typename = simd_enable_expr_t<Expr>>
-    simd_vec& operator=(Expr&& expr) {
-        simd_process(*this, std::forward<Expr>(expr), 0, this->size());
-        return *this;
+    template<typename U = T>
+    simd_slice<simd_complex_to_real_t<U>> as_real() const {
+        return simd_slice<simd_complex_to_real_t<T>>{
+            reinterpret_cast<simd_complex_to_real_t<T>*>(this->data()), this->size() * 2};
     }
 
-    template <typename U, typename = std::enable_if_t<std::is_same_v<std::complex<U>, T>>>
-    simd_slice<U> real_slice() {
-        return simd_slice<U>{reinterpret_cast<U*>(this->data()), this->size() * 2};
-    }
-
-    simd_slice<simd_complex_t<T>> complex_slice() {
+    simd_slice<simd_real_to_complex_t<T>> as_complex() const {
         sb_ASSERT(this->size() % 2 == 0);
-        return simd_slice<simd_complex_t<T>>{
-            reinterpret_cast<simd_complex_t<T>*>(this->data()), this->size() / 2};
+        return simd_slice<simd_real_to_complex_t<T>>{
+            reinterpret_cast<simd_real_to_complex_t<T>*>(this->data()), this->size() / 2};
     }
 };
 
-template <std::size_t W>
-struct simd_width final {};
-
-template <std::size_t N>
-simd_v<float32, 4> simd_load(simd_width<4>, const simd_vec<float32, N>& v, std::size_t i) {
-    return {_mm_load_ps(v.data() + i)};
+inline float32 simd_hmax_ps(__m128 x) {
+    const auto m1 = _mm_shuffle_ps(x, x, _MM_SHUFFLE(0, 0, 3, 2));
+    const auto m2 = _mm_max_ps(x, m1);
+    const auto m3 = _mm_shuffle_ps(m2, m2, _MM_SHUFFLE(0, 0, 0, 1));
+    const auto m4 = _mm_max_ps(m2, m3);
+    return _mm_cvtss_f32(m4);
 }
 
-template <std::size_t N>
-simd_v<float32, 1> simd_load(simd_width<1>, const simd_vec<float32, N>& v, std::size_t i) {
-    return {*(v.data() + i)};
-}
-
-template <std::size_t N>
-void simd_store(simd_width<4>, simd_vec<float32, N>& v, simd_v<float32, 4> in, std::size_t i) {
-    _mm_store_ps(v.data() + i, in.v);
-}
-
-template <std::size_t N>
-void simd_store(simd_width<1>, simd_vec<float32, N>& v, simd_v<float32, 1> in, std::size_t i) {
-    *(v.data() + i) = in.v;
-}
-
-template <typename T, std::size_t N>
-std::size_t simd_size(const simd_vec<T, N>& v) {
-    return v.size();
-}
-
-template <typename T, std::size_t W>
-struct simd_const final : simd_expr {
-    static_assert(W > 0);
-
-    using element_type = T;
-    static constexpr std::size_t min_w = 1;
-
-    alignas(16) const std::array<T, W> values;
-    simd_v<float32, 4> v4;
-
-    simd_const(std::array<T, W>&& vs) : values{std::move(vs)} {
-        alignas(16) const float32 v4s[4] = {values[0 % W], values[1 % W], values[2 % W], values[3 % W]};
-        v4 = simd_v<float32, 4>::load(v4s);
+inline float32 simd_max(simd_slice<const float32> v) {
+    const auto sz = v.size();
+    auto i = size_t{0};
+    auto _max = _mm_setzero_ps();
+    for (; i < sz / 4 * 4; i += 4) {
+        _max = _mm_max_ps(_mm_load_ps(&v[i]), _max);
     }
-
-    simd_const(const T v) requires(W == 1) : values{fill_array<T, W>(v)} {
-        v4 = simd_v<float32, 4>::splat(v);
+    auto max = simd_hmax_ps(_max);
+    for (; i < sz; ++i) {
+        max = std::max(v[i], max);
     }
-};
-
-template <typename T, std::size_t W1, std::size_t W2>
-simd_v<float32, W1> simd_load(simd_width<W1>, const simd_const<T, W2>& c, std::size_t i) {
-    return simd_v<float32, W1>::splat(c.values[i % W2]);
+    return max;
 }
 
-template <typename T, std::size_t W>
-simd_v<float32, 4> simd_load(simd_width<4>, const simd_const<T, W>& c, std::size_t) {
-    return c.v4;
-}
-
-template <typename T, std::size_t W>
-std::size_t simd_size(const simd_const<T, W>&) {
-    return std::numeric_limits<std::size_t>::max();
-}
-
-template <typename A, typename B>
-struct simd_binary_expr : simd_expr {
-    static_assert(std::is_same_v<typename A::element_type, typename B::element_type>);
-    using element_type = typename A::element_type;
-    static constexpr std::size_t min_w = std::max(A::min_w, A::min_w);
-    const std::size_t size;
-    const std::remove_cvref_t<A>* a;
-    const std::remove_cvref_t<B>* b;
-    simd_binary_expr(const A& a, const B& b)
-        : size{std::min<std::size_t>(simd_size(a), simd_size(b))}, a{&a}, b{&b} {
+inline void simd_mul1(simd_slice<const float32> in, simd_slice<float32> out, float32 x) {
+    sb_ASSERT_EQ(in.size(), out.size());
+    const auto sz = in.size();
+    auto i = size_t{0};
+    const auto _x = _mm_set1_ps(x);
+    for (; i < sz / 4 * 4; i += 4) {
+        _mm_store_ps(&out[i], _mm_mul_ps(_mm_load_ps(&in[i]), _x));
     }
-};
-
-template <typename A, typename B>
-std::size_t simd_size(const simd_binary_expr<A, B>& expr) {
-    return expr.size;
-}
-
-#define SIMD_BINARY_EXPR(name, op)                                                                           \
-    template <typename A, typename B>                                                                        \
-    struct simd_expr_##name final : simd_binary_expr<A, B> {                                                 \
-        using simd_binary_expr<A, B>::simd_binary_expr;                                                      \
-    };                                                                                                       \
-                                                                                                             \
-    template <typename A, typename B, std::size_t W>                                                         \
-    auto simd_load(simd_width<W> w, const simd_expr_##name<A, B>& expr, std::size_t i) {                     \
-        return simd_load(w, *expr.a, i) op simd_load(w, *expr.b, i);                                         \
-    }                                                                                                        \
-                                                                                                             \
-    template <typename A, typename B, typename = simd_enable_expr_t<A, B>>                                   \
-    simd_expr_##name<A, B> operator op(const A& a, const B& b) {                                             \
-        return {a, b};                                                                                       \
+    for (; i < sz; ++i) {
+        out[i] = in[i] * x;
     }
-
-SIMD_BINARY_EXPR(add, +)
-SIMD_BINARY_EXPR(sub, -)
-SIMD_BINARY_EXPR(mul, *)
-SIMD_BINARY_EXPR(div, /)
-
-template <typename Expr, std::size_t W = 4, typename = simd_enable_expr_t<Expr>>
-auto simd_sum(Expr&& expr) {
-    auto acc = simd_v<typename std::remove_cvref_t<Expr>::element_type, W>::splat(0.f);
-    const auto sz = simd_size(expr);
-    auto x = std::size_t{0};
-    for (; x < sz / W * W; x += W) {
-        const auto v = simd_load(simd_width<W>{}, expr, x);
-        acc = acc + v;
-    }
-    auto f = acc.sum();
-    for (; x < sz; ++x) {
-        f += simd_load(simd_width<1>{}, expr, x).v;
-    }
-    return f;
-}
-
-template <typename T>
-struct simd_range_expr final : simd_expr {
-    using element_type = typename T;
-    static constexpr std::size_t min_w = 1;
-    const std::size_t size;
-    const T inv_size;
-    const T start;
-    const T stop;
-    const T dist;
-    simd_range_expr(T start, T stop, std::size_t size)
-        : size{size}, inv_size{static_cast<T>(1) / static_cast<T>(size)}, start{start}, stop{stop},
-          dist{stop - start} {
-    }
-};
-
-template <typename T>
-auto simd_range(T start, T stop, std::size_t size) {
-    return simd_range_expr<T>{start, stop, size};
-}
-
-template <typename T, std::size_t W>
-auto simd_load(simd_width<W>, const simd_range_expr<T>& expr, std::size_t i) {
-    return simd_load<T, W>(simd_width<W>{}, expr, i, std::make_index_sequence<W>{});
-}
-
-template <typename T, std::size_t W, std::size_t... I, typename = std::enable_if_t<(sizeof...(I) == W)>>
-auto simd_load(simd_width<W>, const simd_range_expr<T>& expr, std::size_t i, std::index_sequence<I...>) {
-    return simd_v<T, W>::set((expr.start + static_cast<T>(I + i) * expr.inv_size * expr.dist)...);
-}
-
-template <typename T>
-std::size_t simd_size(const simd_range_expr<T>& expr) {
-    return expr.size;
-}
-
-template <typename T>
-struct simd_window_expr : simd_expr {
-    using element_type = T;
-    const simd_range_expr<T> range;
-    simd_window_expr(T start, T stop, std::size_t size) : range{start, stop, size} {
-    }
-};
-
-template <typename T>
-std::size_t simd_size(const simd_window_expr<T>& expr) {
-    return simd_size(expr.range);
-}
-
-template <typename T>
-struct simd_hann_window_expr final : simd_window_expr<T> {
-    using simd_window_expr<T>::simd_window_expr;
-};
-
-template <typename T>
-auto simd_hann_window(T start, T stop, std::size_t size) {
-    return simd_hann_window_expr<T>{start, stop, size};
-}
-
-template <typename T, std::size_t W>
-auto simd_load(simd_width<W> w, const simd_hann_window_expr<T>& expr, std::size_t i) {
-    static auto _0_5 = simd_v<T, W>::splat(static_cast<T>(0.5f));
-    static auto _1_0 = simd_v<T, W>::splat(static_cast<T>(1.f));
-    static auto _2_pi = simd_v<T, W>::splat(static_cast<T>(M_PI * 2.0));
-    return _0_5 * (_1_0 - (_2_pi * simd_load(w, expr.range, i)).cos());
-}
-
-template <typename A, typename B>
-struct simd_complex_binary_expr : simd_expr {
-    static_assert(std::is_same_v<typename A::element_type, typename B::element_type>);
-    using element_type = typename A::element_type;
-    static constexpr std::size_t min_w = 2;
-    const std::size_t size;
-    const std::remove_cvref_t<A>* a;
-    const std::remove_cvref_t<B>* b;
-    simd_binary_expr(const A& a, const B& b)
-        : size{std::min<std::size_t>(simd_size(a), simd_size(b))}, a{&a}, b{&b} {
-    }
-};
-
-template<typename A, typename B>
-std::size_t simd_size(const simd_complex_binary_expr<A, B>& expr) {
-    return expr.size;
-}
-
-template<typename A, typename B>
-struct simd_expr_complex_mul final : simd_complex_binary_expr<A, B> {
-    using simd_complex_binary_expr<A, B>::simd_complex_binary_expr;
-};
-
-template<typename A, typename B, std::size_t W>
-auto simd_load(simd_width<W> w, const simd_expr_complex_mul<A, B>& expr, std::size_t i) {
-    static const auto _mul = simd_const<decltype(expr)::element_type, W>{{-1.f, 1.f}};
-    
-    const auto a = simd_load(w, *expr.a, i);
-    const auto b = simd_load(w, *expr.b, i);
-
-    
-}
-
-template<typename A, typename B, typename = simd_enable_expr_t<A, B>>
-auto simd_complex_mul(const A& a, const B& b) {
-    return simd_expr_complex_mul<A, B>{a, b};
 }

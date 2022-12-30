@@ -17,6 +17,7 @@ int main() {
         .register_filter(fltr_fir_delay)
         .register_filter(fltr_fir_gain)
         .register_filter(fltr_tfm_fft)
+        .register_filter(fltr_tfm_ifft)
         .register_filter(fltr_tfm_xcorrel)
         .register_filter(fltr_tfm_hann_window)
         .register_filter(fltr_tfm_sub)

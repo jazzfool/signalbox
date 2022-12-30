@@ -1,6 +1,6 @@
 #pragma once
 
-#include <xmmintrin.h>
+#include <immintrin.h>
 
 #ifdef __cplusplus
 extern "C" {

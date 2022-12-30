@@ -6,12 +6,13 @@
 
 std::unique_ptr<filter_base> fltr_viz_waveform() {
     struct data : fd_chan_in<1> {
-        float32 ampl = 1.f;
-        std::vector<sample> samples;
+        float32 scale = 1.f;
+        float32 offset = 0.f;
+        simd_vec<sample> samples;
     };
 
     struct out {
-        std::array<sample, IO_FRAME_COUNT> samples;
+        simd_vec<sample> samples;
     };
 
     auto f = filter<data, out>{
@@ -28,19 +29,23 @@ std::unique_ptr<filter_base> fltr_viz_waveform() {
                 s.write(" Channel IN");
 
                 s.next_line();
-                s.write("Amplify: ");
-                ui_float(s, 0.1f, data.ampl);
+                s.write("Scale: ");
+                ui_float(s, 0.1f, data.scale);
 
-                ui_viz_wf(s, nvgRGB(0, 255, 0), 3, data.ampl, data.samples);
+                s.next_line();
+                s.write("Offset: ");
+                ui_float(s, 0.1f, data.offset);
+
+                ui_viz_wf(s, nvgRGB(0, 255, 0), 3, data.scale, data.offset, data.samples);
             },
         .update =
             [](data& data, const out& in) {
                 //
                 data.samples.assign(in.samples.begin(), in.samples.end());
             },
-        .apply = [](const data& data, channels& chans) -> out {
+        .apply = [](const data& d, channels& chans) -> out {
             auto o = out{};
-            std::copy_n(chans.chans[data.chan_in].samples.begin(), IO_FRAME_COUNT, o.samples.begin());
+            o.samples = chans.chans[d.chan_in].samples;
             return o;
         },
     };

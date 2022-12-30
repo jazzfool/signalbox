@@ -98,11 +98,20 @@ std::unique_ptr<filter_base> fltr_fir_gain() {
             },
         .update = [](data& d, const none&) {},
         .apply = [](const data& d, channels& chans) -> none {
-            auto& in = chans.chans[d.chan_in].samples;
+            const auto& in = chans.chans[d.chan_in].samples;
             auto& out = chans.chans[d.chan_out].samples;
+
             out.resize(in.size(), 0.f);
             const auto gain = ma_volume_db_to_linear(d.gain_db);
-            out = in * simd_const<float32, 1>{gain};
+            const auto _gain = _mm_set1_ps(gain);
+            auto i = size_t{0};
+            for (; i < in.size() / 4 * 4; i += 4) {
+                _mm_store_ps(&out[i], _mm_mul_ps(_mm_load_ps(&in[i]), _gain));
+            }
+            for (; i < in.size(); ++i) {
+                out[i] = in[i] * gain;
+            }
+
             return {};
         },
     };

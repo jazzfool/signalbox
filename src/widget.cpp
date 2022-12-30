@@ -232,9 +232,10 @@ void ui_viz_sine(space& space, NVGcolor stroke, uint32 lines, uint32 samples, fl
     nvgRestore(nvg);
 }
 
-void ui_viz_wf(space& space, NVGcolor stroke, uint32 lines, float32 ampl, std::span<const sample> samples) {
+void ui_viz_wf(space& space, NVGcolor stroke, uint32 lines, float32 scale, float32 offset, simd_slice<const sample> samples) {
     const auto nvg = space.nvg();
     const auto outer_rect = space.draw_block(lines);
+    const auto y_range = outer_rect.size.y / 2.f;
 
     nvgSave(nvg);
 
@@ -242,8 +243,8 @@ void ui_viz_wf(space& space, NVGcolor stroke, uint32 lines, float32 ampl, std::s
         space, space.config().colors.faint, outer_rect, std::min(outer_rect.size.x, outer_rect.size.y) / 2.f);
 
     nvgBeginPath(nvg);
-    nvgMoveTo(nvg, outer_rect.pos.x, outer_rect.center().y);
-    nvgLineTo(nvg, outer_rect.max().x, outer_rect.center().y);
+    nvgMoveTo(nvg, outer_rect.pos.x, outer_rect.center().y - offset * y_range);
+    nvgLineTo(nvg, outer_rect.max().x, outer_rect.center().y - offset * y_range);
     nvgStrokeColor(nvg, space.config().colors.fg);
     nvgStrokeWidth(nvg, 1.f);
     nvgStroke(nvg);
@@ -261,7 +262,7 @@ void ui_viz_wf(space& space, NVGcolor stroke, uint32 lines, float32 ampl, std::s
     nvgBeginPath(nvg);
     for (uint32 i = 0; i < samples.size(); ++i) {
         const auto x = static_cast<float32>(i) / static_cast<float32>(samples.size());
-        const auto y = ampl * samples[i];
+        const auto y = scale * samples[i] + offset;
 
         (i == 0 ? nvgMoveTo
                 : nvgLineTo)(nvg, rect.pos.x + x * rect.size.x, rect.pos.y + rect.size.y * (1.f - y) / 2.f);
