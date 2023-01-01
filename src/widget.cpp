@@ -10,6 +10,7 @@
 #include <numbers>
 #include <codecvt>
 #include <miniaudio.h>
+#include <cmath>
 
 void ui_chan_btn(space& space, uint8& chan, bool inc) {
     space.set_color(space.config().colors.blue);
@@ -38,14 +39,15 @@ void ui_chan_sel(space& space, uint8& chan) {
     space.set_color(space.config().colors.fg);
 }
 
-void ui_enum_btn(space& space, uint32& i, uint32 size, bool inc) {
+void ui_enum_btn(space& space, uint32& i, uint32 size, bool wrap, bool inc) {
     space.set_color(space.config().colors.blue);
-    if (space.write_button(inc ? ">" : "<") && (inc ? i < size - 1 : i > 0)) {
+    if (space.write_button(inc ? ">" : "<") && (wrap || (inc ? i < size - 1 : i > 0))) {
         i += ((int8)inc << 1) - 1;
+        i %= size;
     }
 }
 
-void ui_enum_sel(space& space, std::span<const std::string> options, uint32& i) {
+void ui_enum_sel(space& space, std::span<const std::string> options, bool wrap, uint32& i) {
     const auto rtl = space.rtl();
 
     auto max_sz = std::size_t{0};
@@ -53,18 +55,21 @@ void ui_enum_sel(space& space, std::span<const std::string> options, uint32& i) 
         max_sz = std::max(max_sz, s.size());
     }
 
-    ui_enum_btn(space, i, options.size(), rtl);
+    ui_enum_btn(space, i, options.size(), wrap, rtl);
 
     space.set_color(space.config().colors.fg);
-    if (space.write_hover(options[i] + std::string(max_sz - options[i].size(), '.'), space.config().colors.hover, space.color())) {
+    if (space.write_hover(
+            options[i] + std::string(max_sz - options[i].size(), '.'), space.config().colors.hover,
+            space.color())) {
         const auto scroll = static_cast<uint8>(std::abs(space.input().scroll_wheel));
-        if (space.input().scroll_wheel > 0.f && i < options.size() - 1)
+        if (space.input().scroll_wheel > 0.f && (wrap || i < options.size() - 1))
             i += scroll;
-        else if (space.input().scroll_wheel < 0.f && i > 0)
+        else if (space.input().scroll_wheel < 0.f && (wrap || i > 0))
             i -= scroll;
+        i %= options.size();
     }
 
-    ui_enum_btn(space, i, options.size(), !rtl);
+    ui_enum_btn(space, i, options.size(), wrap, !rtl);
 
     space.set_color(space.config().colors.fg);
 }
@@ -192,6 +197,7 @@ void draw_grid(space& space, NVGcolor color, const rect2<float32>& rect, float32
 void ui_viz_sine(space& space, NVGcolor stroke, uint32 lines, uint32 samples, float32 ampl, float32 freq) {
     const auto nvg = space.nvg();
     const auto outer_rect = space.draw_block(lines);
+    const auto border_rect = outer_rect.half_round();
 
     freq *= 2.f * std::numbers::pi;
 
@@ -208,9 +214,9 @@ void ui_viz_sine(space& space, NVGcolor stroke, uint32 lines, uint32 samples, fl
     nvgStroke(nvg);
 
     nvgBeginPath(nvg);
-    nvgRoundedRect(nvg, outer_rect.pos.x, outer_rect.pos.y, outer_rect.size.x, outer_rect.size.y, 2.f);
+    nvgRoundedRect(nvg, border_rect.pos.x, border_rect.pos.y, border_rect.size.x, border_rect.size.y, 2.f);
     nvgStrokeColor(nvg, space.config().colors.frame);
-    nvgStrokeWidth(nvg, 1.5f);
+    nvgStrokeWidth(nvg, 1.f);
     nvgStroke(nvg);
 
     const auto rect = outer_rect.inflate(-2.f);
@@ -233,10 +239,14 @@ void ui_viz_sine(space& space, NVGcolor stroke, uint32 lines, uint32 samples, fl
     nvgRestore(nvg);
 }
 
-void ui_viz_wf(space& space, NVGcolor stroke, uint32 lines, float32 scale, float32 offset, simd_slice<const sample> samples) {
+void ui_viz_wf(
+    space& space, NVGcolor stroke, uint32 lines, float32 scale, float32 offset,
+    simd_slice<const sample> samples) {
     const auto nvg = space.nvg();
     const auto outer_rect = space.draw_block(lines);
+    const auto border_rect = outer_rect.half_round();
     const auto y_range = outer_rect.size.y / 2.f;
+    const auto samples_sz = std::max<size_t>(samples.size(), 1);
 
     nvgSave(nvg);
 
@@ -251,9 +261,9 @@ void ui_viz_wf(space& space, NVGcolor stroke, uint32 lines, float32 scale, float
     nvgStroke(nvg);
 
     nvgBeginPath(nvg);
-    nvgRoundedRect(nvg, outer_rect.pos.x, outer_rect.pos.y, outer_rect.size.x, outer_rect.size.y, 2.f);
+    nvgRoundedRect(nvg, border_rect.pos.x, border_rect.pos.y, border_rect.size.x, border_rect.size.y, 2.f);
     nvgStrokeColor(nvg, space.config().colors.frame);
-    nvgStrokeWidth(nvg, 1.5f);
+    nvgStrokeWidth(nvg, 1.f);
     nvgStroke(nvg);
 
     const auto rect = outer_rect.inflate(-2.f);
@@ -262,7 +272,7 @@ void ui_viz_wf(space& space, NVGcolor stroke, uint32 lines, float32 scale, float
     nvgIntersectScissor(nvg, rect.pos.x, rect.pos.y, rect.size.x, rect.size.y);
     nvgBeginPath(nvg);
     for (uint32 i = 0; i < samples.size(); ++i) {
-        const auto x = static_cast<float32>(i) / static_cast<float32>(samples.size());
+        const auto x = static_cast<float32>(i) / static_cast<float32>(samples_sz);
         const auto y = scale * samples[i] + offset;
 
         (i == 0 ? nvgMoveTo

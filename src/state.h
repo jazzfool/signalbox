@@ -52,6 +52,7 @@ struct board_colors final {
                     {filter_kind::viz, nvgRGB(74, 181, 124)},
                     {filter_kind::fir, nvgRGB(135, 76, 194)},
                     {filter_kind::iir, nvgRGB(194, 76, 151)},
+                    {filter_kind::trk, nvgRGB(157, 255, 0)},
                     {filter_kind::misc, nvgRGB(156, 135, 141)},
                 },
         };

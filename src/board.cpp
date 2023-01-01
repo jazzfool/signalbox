@@ -19,7 +19,7 @@ board::board() : m_filter_executor{m_filters} {
     m_frame0 = true;
     m_max_layout_height = 0.f;
     m_executor_status = "INACTIVE";
-    m_panel_width = 20;
+    m_panel_width = 30;
 }
 
 board& board::create() {
@@ -30,7 +30,7 @@ board& board::create() {
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     glfwWindowHint(GLFW_SCALE_TO_MONITOR, GL_TRUE);
-    glfwWindowHint(GLFW_SAMPLES, 4);
+    glfwWindowHint(GLFW_SAMPLES, 0);
     glfwWindowHint(GLFW_RED_BITS, 8);
     glfwWindowHint(GLFW_GREEN_BITS, 8);
     glfwWindowHint(GLFW_BLUE_BITS, 8);
@@ -92,7 +92,7 @@ board& board::create() {
     glewExperimental = GL_TRUE;
     glewInit();
 
-    m_nvg = nvgCreateGL3(NVG_STENCIL_STROKES);
+    m_nvg = nvgCreateGL3(NVG_STENCIL_STROKES | NVG_ANTIALIAS);
 
     m_config.font_size = 12.f;
 
@@ -269,7 +269,7 @@ void board::draw_frame() {
         s.write("FILTERS");
         s.next_line();
         s.set_bold(false);
-        ui_text_in(s, m_config.colors.fg, m_filter_search, m_panel_width - 2);
+        ui_text_in(s, m_config.colors.fg, m_filter_search, m_panel_width - 3);
         s.next_line();
 
         using filter_iterator = std::vector<filter_info>::iterator;
@@ -308,8 +308,9 @@ void board::draw_frame() {
                     dists.push_back(std::make_tuple(dist, kind, it));
                 }
             }
-            std::sort(
-                dists.begin(), dists.end(), [](const auto& a, const auto& b) { return std::get<0>(a) < std::get<0>(b); });
+            std::sort(dists.begin(), dists.end(), [](const auto& a, const auto& b) {
+                return std::get<0>(a) < std::get<0>(b);
+            });
             for (auto& [dist, kind, it] : dists) {
                 draw_one_filter(kind, it);
             }
@@ -349,26 +350,26 @@ void board::draw_frame() {
         s.set_bold(true);
         s.write("PLAYBACK ");
         s.set_bold(false);
-        ui_enum_sel(s, m_filter_executor.playback_devs(), m_filter_executor.playback_dev_idx);
+        ui_enum_sel(s, m_filter_executor.playback_devs(), false, m_filter_executor.playback_dev_idx);
         s.set_rtl(true);
-        if (s.write_button(playback_muted ? "Unmute" : "Mute")) {
+        if (s.write_button(playback_muted ? "Unmute" : "  Mute")) {
             m_filter_executor.playback_mute.store(
                 !playback_muted); // not atomic negation but other threads will only read
         }
         s.write(" ");
         ui_chan_sel(s, playback_r_chan);
-        s.write(" Right IN ");
+        s.write(" Right  IN ");
         ui_chan_sel(s, playback_l_chan);
-        s.write("Left IN ");
+        s.write("Left  IN ");
 
         s.next_line();
         s.set_rtl(false);
         s.set_bold(true);
-        s.write("CAPTURE ");
+        s.write("CAPTURE  ");
         s.set_bold(false);
-        ui_enum_sel(s, m_filter_executor.capture_devs(), m_filter_executor.capture_dev_idx);
+        ui_enum_sel(s, m_filter_executor.capture_devs(), false, m_filter_executor.capture_dev_idx);
         s.set_rtl(true);
-        if (s.write_button(capture_muted ? "Unmute" : "Mute")) {
+        if (s.write_button(capture_muted ? "Unmute" : "  Mute")) {
             m_filter_executor.capture_mute.store(!capture_muted);
         }
         s.write(" ");

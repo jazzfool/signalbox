@@ -104,11 +104,18 @@ void filter_executor::data_callback(void* output, const void* input, uint32 fram
 
     channels chans;
     chans.frame_count = frame_count;
+
     auto base_chan = channel{};
     base_chan.samples = simd_vec<sample>(frame_count, 0.f);
     base_chan.sample_rate = IO_SAMPLE_RATE;
     for (auto& chan : chans.chans) {
         chan = base_chan;
+    }
+
+    auto base_byte_chan = byte_channel{};
+    base_byte_chan.mode = byte_mode::raw;
+    for (auto& bchan : chans.byte_chans) {
+        bchan = base_byte_chan;
     }
 
     if (!capture_mute.load()) {
@@ -146,8 +153,9 @@ void filter_executor::data_callback(void* output, const void* input, uint32 fram
     const auto info =
         fmt::format("[{:04} frames out in {:05} mcs] @ {} Hz", frame_count, dur, IO_SAMPLE_RATE);
 
+    out_status.insert(fmt::format("ACTIVE {}", info));
+
     if (playback_mute.load()) {
-        out_status.insert(fmt::format("MUTED {}", info));
         return;
     }
 
@@ -155,8 +163,6 @@ void filter_executor::data_callback(void* output, const void* input, uint32 fram
         *(out + i * 2 + 0) = playback_l_samples[i];
         *(out + i * 2 + 1) = playback_r_samples[i];
     }
-
-    out_status.insert(fmt::format("ACTIVE {}", info));
 }
 
 void filter_executor::execute_one(filter_base& f, channels& chans) {

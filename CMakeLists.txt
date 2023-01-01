@@ -20,6 +20,7 @@ set(Source
     src/filters/sse.c
     src/filters/tfm.cpp
     src/filters/viz.cpp
+    src/filters/trk.cpp
 )
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native")

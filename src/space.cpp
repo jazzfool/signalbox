@@ -30,12 +30,13 @@ void space::end() {
     nvgRestore(m_nvg);
     nvgRestore(m_nvg);
 
+    const auto border_rect = m_outer_rect.half_round();
+
     nvgSave(m_nvg);
     nvgBeginPath(m_nvg);
-    nvgRoundedRect(
-        m_nvg, m_outer_rect.pos.x, m_outer_rect.pos.y, m_outer_rect.size.x, m_outer_rect.size.y, 4.f);
+    nvgRoundedRect(m_nvg, border_rect.pos.x, border_rect.pos.y, border_rect.size.x, border_rect.size.y, 4.f);
     nvgStrokeColor(m_nvg, m_config.colors.frame);
-    nvgStrokeWidth(m_nvg, 1.5f);
+    nvgStrokeWidth(m_nvg, 1.f);
     nvgStroke(m_nvg);
     nvgRestore(m_nvg);
 }
@@ -128,7 +129,7 @@ rect2<float32> space::draw_block(uint32 lines) {
     const auto rtl = m_rtl;
     set_rtl(false);
 
-    if (!float_eq(m_layout_cursor.x, 0.f))
+    if (!float_eq(m_layout_cursor.x, m_rect.pos.x))
         next_line();
 
     const auto height = std::min(remaining_height(), m_config.line_height * static_cast<float32>(lines));

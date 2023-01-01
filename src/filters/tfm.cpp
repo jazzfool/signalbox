@@ -38,7 +38,7 @@ std::unique_ptr<filter_base> fltr_tfm_fft() {
                 s.write("Encoding: ");
                 auto i_enc = static_cast<uint32>(d.full_enc);
                 static const std::string enc_enum[2] = {"Norm", "Full"};
-                ui_enum_sel(s, enc_enum, i_enc);
+                ui_enum_sel(s, enc_enum, true, i_enc);
                 d.full_enc = static_cast<bool>(i_enc);
 
                 s.next_line();
@@ -258,16 +258,18 @@ std::unique_ptr<filter_base> fltr_tfm_hann_window() {
     return std::make_unique<filter_fwd<data, none>>(std::move(f));
 }
 
-std::unique_ptr<filter_base> fltr_tfm_sub() {
-    struct data : fd_chan_in<2>, fd_chan_out<1> {};
+std::unique_ptr<filter_base> fltr_tfm_arithmetic() {
+    struct data : fd_chan_in<2>, fd_chan_out<1> {
+        uint32 op;
+    };
 
     auto f = filter<data, none>{
-        .name = "SUBTRACT",
+        .name = "ARITHMETIC",
         .kind = filter_kind::misc,
         .data = {},
         .size =
             [](const data&) {
-                return vector2<uint32>{25, 4};
+                return vector2<uint32>{25, 5};
             },
         .draw =
             [](data& d, space& s) {
@@ -282,6 +284,12 @@ std::unique_ptr<filter_base> fltr_tfm_sub() {
                 s.set_rtl(true);
                 ui_chan_sel(s, d.chan_out);
                 s.write("Channel OUT ");
+
+                s.next_line();
+                s.set_rtl(false);
+                s.write("Op: ");
+                static const std::string op_enum[4] = {"Add", "Sub", "Mul", "Div"};
+                ui_enum_sel(s, op_enum, true, d.op);
             },
         .update = [](data&, const none&) {},
         .apply = [](const data& d, channels& chans) -> none {
@@ -292,12 +300,62 @@ std::unique_ptr<filter_base> fltr_tfm_sub() {
             const auto sz = std::min(in_a.size(), in_b.size());
             out.resize(sz);
             auto i = size_t{0};
+
+            auto f_ps = _mm_add_ps;
+            auto f =
+                static_cast<sample (*)(sample, sample)>([](sample a, sample b) -> sample { return a + b; });
+            if (d.op == 1) {
+                f_ps = _mm_sub_ps;
+                f = [](sample a, sample b) -> sample { return a - b; };
+            } else if (d.op == 2) {
+                f_ps = _mm_mul_ps;
+                f = [](sample a, sample b) -> sample { return a * b; };
+            } else if (d.op == 3) {
+                f_ps = _mm_div_ps;
+                f = [](sample a, sample b) -> sample { return a / b; };
+            }
+
             for (; i < sz / 4 * 4; i += 4) {
-                _mm_store_ps(&out[i], _mm_sub_ps(_mm_load_ps(&in_a[i]), _mm_load_ps(&in_b[i])));
+                _mm_store_ps(&out[i], f_ps(_mm_load_ps(&in_a[i]), _mm_load_ps(&in_b[i])));
             }
             for (; i < sz; ++i) {
-                out[i] = in_a[i] - in_b[i];
+                out[i] = f(in_a[i], in_b[i]);
             }
+
+            return {};
+        }};
+
+    return std::make_unique<filter_fwd<data, none>>(std::move(f));
+}
+
+std::unique_ptr<filter_base> fltr_tfm_normalize() {
+    struct data : fd_chan_in<1>, fd_chan_out<1> {};
+
+    auto f = filter<data, none>{
+        .name = "NORMALIZE",
+        .kind = filter_kind::misc,
+        .data = {},
+        .size =
+            [](const data&) {
+                return vector2<uint32>{25, 4};
+            },
+        .draw =
+            [](data& d, space& s) {
+                ui_chan_sel(s, d.chan_in);
+                s.write(" Channel IN");
+
+                s.next_line();
+                s.set_rtl(true);
+                ui_chan_sel(s, d.chan_out);
+                s.write("Channel OUT ");
+            },
+        .update = [](data&, const none&) {},
+        .apply = [](const data& d, channels& chans) -> none {
+            const auto& in_a = chans.chans[d.chan_in].samples;
+            auto& out = chans.chans[d.chan_out].samples;
+            out.resize(in_a.size(), 0.f);
+
+            simd_mul1(in_a, out, 1.f / simd_max(in_a));
 
             return {};
         }};

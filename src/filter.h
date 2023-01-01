@@ -99,16 +99,10 @@ struct fd_chan_vec_out : fd_chans_out {
     }
 };
 
-enum class filter_kind { chn, gen, viz, fir, iir, misc, _max };
+enum class filter_kind { chn, gen, viz, fir, iir, trk, misc, _max };
 
 static constexpr const char* filter_kind_names[(size_t)filter_kind::_max] = {
-    "Channel",
-    "Generation",
-    "Visualization",
-    "FIR",
-    "IIR",
-    "Miscellaneous"
-};
+    "Channel", "Generation", "Visualization", "FIR", "IIR", "Tracker", "Miscellaneous"};
 
 struct filter_base {
     virtual ~filter_base() {
@@ -222,3 +216,8 @@ struct virtual_filter final {
 };
 
 using filter_fn = std::unique_ptr<filter_base> (*)();
+
+template <typename TDataOut, typename TDataIn>
+std::unique_ptr<filter_base> make_filter(filter<TDataOut, TDataIn>&& f) {
+    return std::make_unique<filter_fwd<TDataOut, TDataIn>>(std::move(f));
+}

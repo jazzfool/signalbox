@@ -6,6 +6,7 @@
 #include "filters/chn.h"
 #include "filters/fir.h"
 #include "filters/tfm.h"
+#include "filters/trk.h"
 
 #include <spdlog/fmt/fmt.h>
 
@@ -20,10 +21,12 @@ int main() {
         .register_filter(fltr_tfm_ifft)
         .register_filter(fltr_tfm_xcorrel)
         .register_filter(fltr_tfm_hann_window)
-        .register_filter(fltr_tfm_sub)
+        .register_filter(fltr_tfm_arithmetic)
+        .register_filter(fltr_tfm_normalize)
         .register_filter(fltr_viz_waveform)
         .register_filter(fltr_viz_vu)
         .register_filter(fltr_chn_split)
+        .register_filter(fltr_trk_sampler)
         .run_loop()
         .destroy();
 }

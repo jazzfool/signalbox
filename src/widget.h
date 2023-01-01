@@ -11,7 +11,7 @@ struct space;
 struct NVGcolor;
 
 void ui_chan_sel(space& space, uint8& chan);
-void ui_enum_sel(space& space, std::span<const std::string> options, uint32& i);
+void ui_enum_sel(space& space, std::span<const std::string> options, bool wrap, uint32& i);
 void ui_float_ran(space& space, float32 min, float32 max, float32 step, float32& x);
 void ui_float(space& space, float32 step, float32& x); 
 void ui_int_ran(space& space, int32 min, int32 max, int32 step, uint8 pad, int32& x);

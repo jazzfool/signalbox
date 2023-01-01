@@ -10,6 +10,8 @@
 #include <string_view>
 #include <vector>
 #include <cctype>
+#include <type_traits>
+#include <utility>
 
 #define sb_ASSERT(x) assert((x))
 #define sb_ASSERT_EQ(x, y) assert(((x) == (y)))
@@ -59,6 +61,13 @@ struct rect2 {
 
     rect2 translate(const vector2<T>& xy) const {
         return {{pos + xy}, size};
+    }
+
+    template <typename U = T, typename = std::enable_if_t<std::is_floating_point_v<U>>>
+    rect2 half_round() const {
+        return {
+            {std::round(pos.x) + static_cast<T>(0.5), std::round(pos.y) + static_cast<T>(0.5)},
+            {std::round(size.x), std::round(size.y)}};
     }
 };
 

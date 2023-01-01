@@ -15,7 +15,15 @@ struct channel final {
     uint32 sample_rate;
 };
 
+enum class byte_mode { raw, tracker };
+
+struct byte_channel final {
+    simd_vec<uint8> bytes;
+    byte_mode mode;
+};
+
 struct channels final {
     std::array<channel, MAX_CHANNELS> chans;
+    std::array<byte_channel, MAX_CHANNELS> byte_chans;
     uint32 frame_count;
 };
