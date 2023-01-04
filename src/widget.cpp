@@ -2,6 +2,7 @@
 
 #include "space.h"
 #include "filters/sample.h"
+#include "filters/trk.h"
 
 #include <sstream>
 #include <iomanip>
@@ -126,6 +127,46 @@ void ui_int_ran(space& space, int32 min, int32 max, int32 step, uint8 pad, int32
 
 void ui_int(space& space, int32 step, uint8 pad, int32& x) {
     ui_int_ran(space, INT32_MIN, INT32_MAX, step, pad, x);
+}
+
+void ui_tracker_note(space& space, tracker_note& note) {
+    auto hover = false;
+
+    switch (note.mode) {
+    case tracker_note_mode::empty: {
+        space.set_color(space.config().colors.semifaint);
+        hover = space.write_hover("...", space.config().colors.hover, space.config().colors.semifaint);
+        break;
+    }
+    case tracker_note_mode::on: {
+        space.set_color(space.config().colors.fg);
+        hover = space.write_hover(
+            fmt::format("{:03}", note.index), space.config().colors.hover, space.config().colors.fg);
+        break;
+    }
+    case tracker_note_mode::off: {
+        space.set_color(space.config().colors.red);
+        hover = space.write_hover("OFF", space.config().colors.hover, space.config().colors.red);
+        break;
+    }
+    default:
+        break;
+    }
+
+    if (hover) {
+        if (note.mode == tracker_note_mode::on) {
+            const auto scroll = space.input().scroll_wheel;
+            if (scroll > 0.f && note.index < 255) {
+                ++note.index;
+            } else if (scroll < 0.f && note.index > 0) {
+                --note.index;
+            }
+        }
+
+        if (space.input().mouse_just_pressed[0]) {
+            note.mode = (tracker_note_mode)(((uint8)note.mode + 1) % (uint8)tracker_note_mode::_max);
+        }
+    }
 }
 
 void ui_text_in(space& space, NVGcolor color, std::string& s, uint32 len) {
@@ -282,6 +323,75 @@ void ui_viz_wf(
     nvgStrokeWidth(nvg, 1.f);
     nvgStroke(nvg);
     nvgRestore(nvg);
+
+    nvgRestore(nvg);
+}
+
+void ui_viz_sample(
+    space& space, NVGcolor stroke, uint32 lines, uint64 length, uint64 scale, uint64 first, uint64 last,
+    simd_slice<const sample> samples, size_t active_splice, std::span<int32> splices) {
+    const auto nvg = space.nvg();
+    const auto outer_rect = space.draw_block(lines);
+    const auto border_rect = outer_rect.half_round();
+    const auto y_range = outer_rect.size.y / 2.f;
+
+    nvgSave(nvg);
+
+    nvgBeginPath(nvg);
+    nvgRoundedRect(nvg, border_rect.pos.x, border_rect.pos.y, border_rect.size.x, border_rect.size.y, 2.f);
+    nvgStrokeColor(nvg, space.config().colors.frame);
+    nvgStrokeWidth(nvg, 1.f);
+    nvgStroke(nvg);
+
+    const auto rect = outer_rect.inflate(-2.f);
+
+    const auto samples_slice = samples.slice(first / scale, (last - first) / scale);
+    const auto inv_samples_slice_sz = 1.f / static_cast<float32>(samples_slice.size());
+
+    nvgSave(nvg);
+    nvgIntersectScissor(nvg, rect.pos.x, rect.pos.y, rect.size.x, rect.size.y);
+    nvgBeginPath(nvg);
+    for (uint64 i = 0; i < samples_slice.size(); ++i) {
+        const auto x = static_cast<float32>(i) * inv_samples_slice_sz;
+        const auto y = samples_slice[i];
+
+        (i == 0 ? nvgMoveTo
+                : nvgLineTo)(nvg, rect.pos.x + x * rect.size.x, rect.pos.y + rect.size.y * (1.f - y) / 2.f);
+    }
+    nvgStrokeColor(nvg, stroke);
+    nvgStrokeWidth(nvg, 1.f);
+    nvgStroke(nvg);
+    nvgRestore(nvg);
+
+    const auto inv_length = 1.f / (float32)length;
+
+    auto splice_fg = space.config().colors.fg;
+    splice_fg.a = 0.7f;
+    nvgBeginPath(nvg);
+    nvgStrokeColor(nvg, splice_fg);
+    nvgStrokeWidth(nvg, 1.f);
+    for (size_t i = 0; i < splices.size(); ++i) {
+        const auto splice = splices[i];
+        if (i == active_splice || splice < first || splice > last)
+            continue;
+        const auto f_splice = remap((float32)first, (float32)last, 0.f, 1.f, (float32)splice);
+        const auto x = rect.pos.x + rect.size.x * f_splice;
+        nvgMoveTo(nvg, x, rect.pos.y);
+        nvgLineTo(nvg, x, rect.max().y);
+    }
+    nvgStroke(nvg);
+
+    if (splices[active_splice] > first && splices[active_splice] < last) {
+        nvgBeginPath(nvg);
+        const auto x =
+            rect.pos.x +
+            rect.size.x * remap((float32)first, (float32)last, 0.f, 1.f, (float32)splices[active_splice]);
+        nvgMoveTo(nvg, x, rect.pos.y);
+        nvgLineTo(nvg, x, rect.max().y);
+        nvgStrokeColor(nvg, space.config().colors.yellow);
+        nvgStrokeWidth(nvg, 2.f);
+        nvgStroke(nvg);
+    }
 
     nvgRestore(nvg);
 }

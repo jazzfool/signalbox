@@ -136,7 +136,7 @@ rect2<float32> space::draw_block(uint32 lines) {
     const auto out_rect = rect2<float32>{m_layout_cursor, {m_rect.size.x, height}};
 
     m_layout_cursor.x = m_rect.pos.x;
-    m_layout_cursor.y += height;
+    m_layout_cursor.y += height + m_config.inner_padding;
 
     set_rtl(rtl);
 

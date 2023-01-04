@@ -27,6 +27,7 @@ int main() {
         .register_filter(fltr_viz_vu)
         .register_filter(fltr_chn_split)
         .register_filter(fltr_trk_sampler)
+        .register_filter(fltr_trk_tracker)
         .run_loop()
         .destroy();
 }

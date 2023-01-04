@@ -87,7 +87,7 @@ inline T remap(T in_lo, T in_hi, T out_lo, T out_hi, T x) {
 }
 
 template <typename T, std::size_t N>
-constexpr auto fill_array(const T& value) -> std::array<T, N> {
+constexpr std::array<T, N> fill_array(const T& value) {
     std::array<T, N> ret;
     ret.fill(value);
     return ret;
@@ -113,4 +113,13 @@ inline uint32 str_distance(std::string_view a, std::string_view b) {
         dists[i] = std::min(std::min(dists[i - sz_a] + 1, dists[i - 1] + 1), dists[i - sz_a - 1] + cost);
     }
     return dists.back();
+}
+
+inline uint32 rdbytesu32le(const uint8* p) {
+    return (uint32)p[3] << 24 | (uint32)p[2] << 16 | (uint32)p[1] << 8 | (uint32)p[0];
+}
+
+inline uint64 rdbytesu64le(const uint8* p) {
+    return (uint64)p[7] << 56 | (uint64)p[6] << 48 | (uint64)p[5] << 40 | (uint64)p[4] << 32 |
+           (uint64)p[3] << 24 | (uint64)p[2] << 16 | (uint64)p[1] << 8 | (uint64)p[0];
 }

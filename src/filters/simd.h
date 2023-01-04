@@ -47,12 +47,12 @@ class simd_allocator {
     }
 };
 
-template<typename T, typename U>
+template <typename T, typename U>
 bool operator==(const simd_allocator<T>&, const simd_allocator<U>&) {
     return true;
 }
 
-template<typename T, typename U>
+template <typename T, typename U>
 bool operator!=(const simd_allocator<T>&, const simd_allocator<U>&) {
     return false;
 }
@@ -144,7 +144,17 @@ template <typename T>
 struct simd_vec<T, 0> final : std::span<T> {
     using std::span<T>::span;
 
-    template<typename U = T>
+    simd_slice<T> slice(std::size_t offset, std::size_t count) {
+        sb_ASSERT(count <= this->size() - offset);
+        return simd_slice<T>{this->data() + offset, count};
+    }
+
+    simd_slice<const T> slice(std::size_t offset, std::size_t count) const {
+        sb_ASSERT(count <= this->size() - offset);
+        return simd_slice<const T>{this->data() + offset, count};
+    }
+
+    template <typename U = T>
     simd_slice<simd_complex_to_real_t<U>> as_real() const {
         return simd_slice<simd_complex_to_real_t<T>>{
             reinterpret_cast<simd_complex_to_real_t<T>*>(this->data()), this->size() * 2};
