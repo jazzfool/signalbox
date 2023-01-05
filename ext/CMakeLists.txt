@@ -73,8 +73,16 @@ FetchContent_Declare(
 FetchContent_Declare(
     sse2neon
     GIT_REPOSITORY https://github.com/DLTcollab/sse2neon.git
-    GIT_TAG 31cb30b1f93256d7aa19bfbaf4558c1d35e9b3ba
+    GIT_TAG 31cb30b1f93256d7aa19bfbaf4558c1d35e9b3ba # latest
 )
+
+if(${SB_USE_METAL})
+    FetchContent_Declare(
+        MetalNanoVG
+        GIT_REPOSITORY https://github.com/ollix/MetalNanoVG.git
+        GIT_TAG 58670cd64715e99b00c2fbddb6ace2264873ce91 # latest
+    )
+endif()
 
 FetchContent_MakeAvailable(glfw nanovg spdlog glew glm freetype miniaudio SPSCQueue RingBuffer muFFT sse_mathfun sse2neon)
 
@@ -83,6 +91,15 @@ target_sources(nanovg PRIVATE ${CMAKE_BINARY_DIR}/_deps/nanovg-src/src/nanovg.c)
 target_include_directories(nanovg PUBLIC ${CMAKE_BINARY_DIR}/_deps/nanovg-src/src)
 target_compile_definitions(nanovg PRIVATE FONS_USE_FREETYPE)
 target_link_libraries(nanovg PRIVATE freetype)
+
+if(${SB_USE_METAL})
+    FetchContent_MakeAvailable(MetalNanoVG)
+
+    add_library(MetalNanoVG)
+    target_sources(MetalNanoVG PRIVATE ${CMAKE_BINARY_DIR}/_deps/metalnanovg-src/src/nanovg_mtl.m)
+    target_include_directories(MetalNanoVG PUBLIC ${CMAKE_BINARY_DIR}/_deps/metalnanovg-src/src)
+    target_link_libraries(MetalNanoVG PRIVATE nanovg "-framework Metal" "-framework QuartzCore")
+endif()
 
 add_library(miniaudio INTERFACE)
 target_include_directories(miniaudio INTERFACE ${CMAKE_BINARY_DIR}/_deps/miniaudio-src)

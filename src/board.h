@@ -1,5 +1,6 @@
 #pragma once
 
+#include "context.h"
 #include "util.h"
 #include "state.h"
 #include "space.h"
@@ -42,9 +43,9 @@ class board final {
     void draw_frame();
     void reset_layout();
 
+    context m_cx;
+
     board_config m_config;
-    GLFWwindow* m_window;
-    NVGcontext* m_nvg;
     bool m_frame0;
 
     float32 m_dpi_scale;
