@@ -20,24 +20,30 @@ space::space(
 }
 
 void space::begin() {
+    const auto border_rect = m_outer_rect.half_round();
+
     nvgSave(m_nvg);
-    nvgIntersectScissor(
-        m_nvg, m_outer_rect.pos.x, m_outer_rect.pos.y, m_outer_rect.size.x, m_outer_rect.size.y);
+
+    nvgBeginPath(m_nvg);
+    nvgRoundedRect(m_nvg, NVG_RECT_ARGS(m_outer_rect), 2.f);
+    nvgFillColor(m_nvg, nvgRGB(10, 10, 10));
+    nvgFill(m_nvg);
+
+    nvgBeginPath(m_nvg);
+    nvgRoundedRect(m_nvg, NVG_RECT_ARGS(border_rect), 2.f);
+    nvgStrokeColor(m_nvg, nvgRGB(50, 50, 50));
+    nvgStrokeWidth(m_nvg, 1.f);
+    nvgStroke(m_nvg);
+
+    nvgRestore(m_nvg);
+
+    nvgSave(m_nvg);
+    nvgIntersectScissor(m_nvg, NVG_RECT_ARGS(m_outer_rect));
     nvgSave(m_nvg);
 }
 
 void space::end() {
     nvgRestore(m_nvg);
-    nvgRestore(m_nvg);
-
-    const auto border_rect = m_outer_rect.half_round();
-
-    nvgSave(m_nvg);
-    nvgBeginPath(m_nvg);
-    nvgRoundedRect(m_nvg, border_rect.pos.x, border_rect.pos.y, border_rect.size.x, border_rect.size.y, 4.f);
-    nvgStrokeColor(m_nvg, m_config.colors.frame);
-    nvgStrokeWidth(m_nvg, 1.f);
-    nvgStroke(m_nvg);
     nvgRestore(m_nvg);
 }
 

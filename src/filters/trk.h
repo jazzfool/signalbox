@@ -13,3 +13,4 @@ struct tracker_note final {
 
 std::unique_ptr<filter_base> fltr_trk_sampler();
 std::unique_ptr<filter_base> fltr_trk_tracker();
+std::unique_ptr<filter_base> fltr_trk_clock();

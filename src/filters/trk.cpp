@@ -93,7 +93,7 @@ std::unique_ptr<filter_base> fltr_trk_sampler() {
                 s.set_rtl(true);
                 if (s.write_button("Add")) {
                     d.active_splice = d.splices.size();
-                    d.splices.push_back(0);
+                    d.splices.push_back((d.viewer_min + d.viewer_max) / 2);
                 }
 
                 const auto splice_step = (d.viewer_max - d.viewer_min) / 100;
@@ -217,9 +217,9 @@ std::unique_ptr<filter_base> fltr_trk_sampler() {
 }
 
 std::unique_ptr<filter_base> fltr_trk_tracker() {
-    struct data : fd_chan_out<1> {
+    struct data : fd_chan_in<1>, fd_chan_out<1> {
         std::array<tracker_note, 16> notes = fill_array<tracker_note, 16>({});
-        size_t active_note;
+        size_t active_note = 0;
     };
 
     struct out {
@@ -227,7 +227,6 @@ std::unique_ptr<filter_base> fltr_trk_tracker() {
     };
 
     struct locals {
-        size_t t_m = 0;
         size_t i = 0;
     };
 
@@ -237,10 +236,14 @@ std::unique_ptr<filter_base> fltr_trk_tracker() {
         .data = {},
         .size =
             [](const data&) {
-                return vector2<uint32>{30, 18};
+                return vector2<uint32>{30, 19};
             },
         .draw =
             [](data& d, space& s) {
+                ui_chan_sel(s, d.chan_in);
+                s.write(" Byte Channel CLK IN");
+
+                s.next_line();
                 s.set_rtl(true);
                 ui_chan_sel(s, d.chan_out);
                 s.write("Byte Channel TRK OUT ");
@@ -255,31 +258,95 @@ std::unique_ptr<filter_base> fltr_trk_tracker() {
             },
         .update = [](data& d, const out& o) { d.active_note = o.active_note; },
         .apply = [l = locals{}](const data& d, channels& chans) mutable -> out {
+            const auto& bytes_in = chans.byte_chans[d.chan_in];
+
+            if (bytes_in.mode != byte_mode::clock)
+                return {l.i};
+
             auto& bytes_out = chans.byte_chans[d.chan_out];
             bytes_out.mode = byte_mode::tracker;
 
-            const auto bpm = 200.f;
-            const auto bps = bpm / 60.f;
-            const auto bpn = 0.5f;
-
-            const auto spb = static_cast<float32>(IO_SAMPLE_RATE) / bps;
-            const auto spn = static_cast<uint32>(spb * bpn);
-
-            if (l.t_m > IO_FRAME_COUNT) {
-                l.t_m -= IO_FRAME_COUNT;
-                return {l.i};
-            } else {
-                l.t_m = 0;
-                l.i = (l.i + 1) % 16;
-            }
-
-            if (l.t_m == 0) {
-                const auto p_note = reinterpret_cast<const uint8*>(&d.notes[l.i]);
-                bytes_out.bytes.insert(bytes_out.bytes.end(), p_note, p_note + sizeof(tracker_note));
-                l.t_m = spn;
+            for (size_t i = 0; i < IO_FRAME_COUNT; ++i) {
+                if (bytes_in.bytes[i] > 0) {
+                    l.i = (l.i + 1) % 16;
+                    const auto p_note = reinterpret_cast<const uint8*>(&d.notes[l.i]);
+                    bytes_out.bytes.insert(bytes_out.bytes.end(), p_note, p_note + sizeof(tracker_note));
+                }
             }
 
             return {l.i};
+        },
+    };
+
+    return make_filter(std::move(f));
+}
+
+std::unique_ptr<filter_base> fltr_trk_clock() {
+    struct data : fd_chan_out<1> {
+        bool pause = false;
+        float32 bpm = 200.f;
+        int32 lpb = 4;
+    };
+
+    struct locals {
+        size_t t_m = 0;
+    };
+
+    auto f = filter<data, none>{
+        .name = "TRK-CLOCK",
+        .kind = filter_kind::trk,
+        .size =
+            [](const data&) {
+                return vector2<uint32>{30, 5};
+            },
+        .draw =
+            [](data& d, space& s) {
+                s.set_rtl(true);
+                ui_chan_sel(s, d.chan_out);
+                s.write("Byte Channel CLK OUT ");
+
+                s.next_line();
+                s.set_rtl(false);
+                s.set_color(s.config().colors.media_control);
+                if (s.write_button(d.pause ? "Play" : "Pause")) {
+                    d.pause = !d.pause;
+                }
+                s.set_color(s.config().colors.fg);
+
+                s.next_line();
+                s.write("BPM: ");
+                ui_float_ran(s, 1.f, 999.f, 0.5f, d.bpm);
+
+                s.next_line();
+                s.write("LPB: ");
+                ui_int_ran(s, 1, 32, 1, 2, d.lpb);
+            },
+        .update = [](data&, const none&) {},
+        .apply = [l = locals{}](const data& d, channels& chans) mutable -> none {
+            auto& bytes_out = chans.byte_chans[d.chan_out];
+
+            bytes_out.mode = byte_mode::clock;
+            bytes_out.bytes.resize(IO_FRAME_COUNT, 0);
+
+            if (d.pause)
+                return {};
+
+            if (l.t_m >= IO_FRAME_COUNT) {
+                l.t_m -= IO_FRAME_COUNT;
+            } else {
+                bytes_out.bytes[l.t_m] = 1;
+                l.t_m = 0;
+            }
+
+            if (l.t_m == 0) {
+                const auto bpl = 1.f / d.lpb;                                // beats per line
+                const auto bps = d.bpm / 60.f;                               // beats per second
+                const auto spb = static_cast<float32>(IO_SAMPLE_RATE) / bps; // samples per beat
+                const auto spl = static_cast<uint32>(spb * bpl);             // samples per line
+                l.t_m = spl;
+            }
+
+            return {};
         },
     };
 

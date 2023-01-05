@@ -36,6 +36,8 @@ using float64 = double;
 template <typename T>
 using vector2 = glm::tvec2<T>;
 
+#define NVG_RECT_ARGS(arg_rect) arg_rect.pos.x, arg_rect.pos.y, arg_rect.size.x, arg_rect.size.y
+
 template <typename T>
 struct rect2 {
     vector2<T> pos, size;

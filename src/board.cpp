@@ -240,7 +240,10 @@ void board::draw_frame() {
     glfwGetFramebufferSize(m_window, &fb_width, &fb_height);
 
     glViewport(0, 0, fb_width, fb_height);
-    glClearColor(0.f, 0.f, 0.f, 1.f);
+
+    const auto clear_color = m_config.colors.bg;
+
+    glClearColor(clear_color.r, clear_color.g, clear_color.b, 1.f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
     nvgBeginFrame(m_nvg, width, height, m_dpi_scale);
@@ -304,7 +307,9 @@ void board::draw_frame() {
             dists.reserve(m_filter_count);
             for (auto& [kind, filters] : m_all_filters) {
                 for (auto it = filters.begin(); it != filters.end(); ++it) {
-                    const auto dist = str_distance(it->name, m_filter_search);
+                    const auto dist = str_distance(
+                        it->name.substr(0, std::min(it->name.size(), m_filter_search.size())),
+                        m_filter_search);
                     dists.push_back(std::make_tuple(dist, kind, it));
                 }
             }

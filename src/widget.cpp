@@ -372,7 +372,7 @@ void ui_viz_sample(
     nvgStrokeWidth(nvg, 1.f);
     for (size_t i = 0; i < splices.size(); ++i) {
         const auto splice = splices[i];
-        if (i == active_splice || splice < first || splice > last)
+        if (i == active_splice || splice <= first || splice >= last)
             continue;
         const auto f_splice = remap((float32)first, (float32)last, 0.f, 1.f, (float32)splice);
         const auto x = rect.pos.x + rect.size.x * f_splice;
@@ -381,7 +381,7 @@ void ui_viz_sample(
     }
     nvgStroke(nvg);
 
-    if (splices[active_splice] > first && splices[active_splice] < last) {
+    if (splices[active_splice] >= first && splices[active_splice] <= last) {
         nvgBeginPath(nvg);
         const auto x =
             rect.pos.x +
