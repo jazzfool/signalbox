@@ -2,9 +2,18 @@
 
 #include "util.h"
 #include "widget.h"
+#include "enc.h"
 
 #include <spdlog/spdlog.h>
 #include <map>
+#include <nfd.hpp>
+#include <fstream>
+
+#ifdef __APPLE__
+#define SB_DPI_SCALE(X) 1.f
+#else
+#define SB_DPI_SCALE(X) X
+#endif
 
 board::board() : m_filter_executor{m_filters} {
     m_focus = nullptr;
@@ -13,6 +22,7 @@ board::board() : m_filter_executor{m_filters} {
     m_max_layout_height = 0.f;
     m_executor_status = "INACTIVE";
     m_panel_width = 30;
+    m_filter_count = 0;
 }
 
 board& board::create() {
@@ -28,7 +38,9 @@ board& board::create() {
 
     glfwSetCursorPosCallback(m_cx.window, [](GLFWwindow* window, float64 x, float64 y) {
         auto& b = *reinterpret_cast<board*>(glfwGetWindowUserPointer(window));
-        b.m_input.cursor_pos = vector2<float32>{static_cast<float32>(x), static_cast<float32>(y)};
+        b.m_input.cursor_pos = vector2<float32>{
+            static_cast<float32>(x) / SB_DPI_SCALE(b.m_dpi_scale),
+            static_cast<float32>(y) / SB_DPI_SCALE(b.m_dpi_scale)};
     });
 
     glfwSetMouseButtonCallback(m_cx.window, [](GLFWwindow* window, int32 button, int32 action, int32 mods) {
@@ -63,6 +75,8 @@ board& board::create() {
         context_on_resize(&b.m_cx);
         b.draw_frame();
     });
+
+    NFD::Init();
 
     m_config.font_size = 12.f;
 
@@ -132,6 +146,12 @@ board& board::register_filter(filter_fn fn) {
     info.fn = fn;
     info.name = dummy->name();
 
+    for (const auto& [kind, filters] : m_all_filters) {
+        sb_ASSERT_EQ(
+            std::find_if(filters.begin(), filters.end(), [&](const auto& f) { return f.name == info.name; }),
+            filters.end());
+    }
+
     const auto fd_in = dummy->data_chans_in();
     const auto fd_out = dummy->data_chans_out();
 
@@ -146,45 +166,48 @@ board& board::register_filter(filter_fn fn) {
     return *this;
 }
 
-void board::add_filter(std::unique_ptr<filter_base>&& filter) {
-    auto lock = std::lock_guard{m_filters.mut};
+void board::add_filter(std::unique_ptr<filter_base>&& filter, bool decoding) {
+    if (!decoding)
+        auto lock = std::lock_guard{m_filters.mut};
 
-    const auto chan_in = filter->data_chans_in();
-    const auto chan_out = filter->data_chans_out();
+    if (!decoding) {
+        const auto chan_in = filter->data_chans_in();
+        const auto chan_out = filter->data_chans_out();
 
-    if (chan_in || chan_out) {
-        auto chan = uint8{0};
-        auto max = uint8{0};
-        auto b = false;
-        for (auto& f : m_filters.filters) {
-            const auto f_chan_in = f->data_chans_in();
-            const auto f_chan_out = f->data_chans_out();
-            if (f_chan_in) {
-                for (auto c : f_chan_in->chans_in()) {
-                    max = std::max(c, max);
+        if (chan_in || chan_out) {
+            auto chan = uint8{0};
+            auto max = uint8{0};
+            auto b = false;
+            for (auto& f : m_filters.filters) {
+                const auto f_chan_in = f->data_chans_in();
+                const auto f_chan_out = f->data_chans_out();
+                if (f_chan_in) {
+                    for (auto c : f_chan_in->chans_in()) {
+                        max = std::max(c, max);
+                    }
+                }
+                if (f_chan_out) {
+                    b = true;
+                    for (auto c : f_chan_out->chans_out()) {
+                        max = std::max(c, max);
+                        chan = std::max(c, chan);
+                    }
                 }
             }
-            if (f_chan_out) {
-                b = true;
-                for (auto c : f_chan_out->chans_out()) {
-                    max = std::max(c, max);
-                    chan = std::max(c, chan);
+
+            if (chan_in) {
+                for (auto& c : chan_in->chans_in()) {
+                    c = chan;
+                    chan -= (uint8)(chan > 0);
                 }
             }
-        }
 
-        if (chan_in) {
-            for (auto& c : chan_in->chans_in()) {
-                c = chan;
-                chan -= (uint8)(chan > 0);
-            }
-        }
-
-        if (chan_out) {
-            for (auto& c : chan_out->chans_out()) {
-                c = max += (uint8)(b);
-                b = true;
-                max = std::min(max, uint8{99});
+            if (chan_out) {
+                for (auto& c : chan_out->chans_out()) {
+                    c = max += (uint8)(b);
+                    b = true;
+                    max = std::min(max, uint8{99});
+                }
             }
         }
     }
@@ -193,14 +216,21 @@ void board::add_filter(std::unique_ptr<filter_base>&& filter) {
     ++m_filter_count;
 }
 
+const board::filter_info* board::find_filter(std::string_view name) {
+    for (const auto& [kind, filters] : m_all_filters) {
+        for (const auto& f : filters) {
+            if (f.name == name)
+                return &f;
+        }
+    }
+    return nullptr;
+}
+
 space board::new_spacef(const rect2<float32>& rect) {
     return space{m_cx.window, m_cx.nvg, m_focus, m_did_focus, m_input, m_config, rect};
 }
 
 void board::draw_frame() {
-    float32 x_scale, y_scale;
-    glfwGetWindowContentScale(m_cx.window, &x_scale, &y_scale);
-
     int32 width, height;
     glfwGetWindowSize(m_cx.window, &width, &height);
 
@@ -211,9 +241,7 @@ void board::draw_frame() {
     context_begin_frame(&m_cx, clear_color.r, clear_color.g, clear_color.b);
 
     nvgBeginFrame(m_cx.nvg, width, height, m_dpi_scale);
-    // #ifndef SB_USE_METAL
-    // nvgScale(m_cx.nvg, x_scale, y_scale);
-    // #endif
+    nvgScale(m_cx.nvg, SB_DPI_SCALE(m_dpi_scale), SB_DPI_SCALE(m_dpi_scale));
 
     if (m_frame0) {
         m_frame0 = false;
@@ -306,7 +334,7 @@ void board::draw_frame() {
         const auto capture_muted = m_filter_executor.capture_mute.load();
 
         auto s =
-            make_spacef({m_layout_rect.size.x, m_config.line_height * 3.f + 2.f * m_config.inner_padding});
+            make_spacef({m_layout_rect.size.x, m_config.line_height * 4.f + 2.f * m_config.inner_padding});
         s.begin();
         s.set_bold(true);
         s.write(m_executor_status);
@@ -348,6 +376,53 @@ void board::draw_frame() {
         s.write(" Right OUT ");
         ui_chan_sel(s, capture_l_chan);
         s.write("Left OUT ");
+
+        s.next_line();
+        s.set_rtl(false);
+        s.set_color(m_config.colors.green);
+        if (s.write_button("Save")) {
+            NFD::UniquePath save_path;
+            const nfdfilteritem_t filters[1] = {{"Signalbox Sequence", "sbxsq"}};
+
+            const auto result = NFD::SaveDialog(save_path, filters, 1);
+            if (result == NFD_OKAY) {
+                std::lock_guard lock{m_filters.mut};
+                std::fstream file{save_path.get(), std::ios::out | std::ios::binary};
+                enc_encode_one<uint32>(file, m_filters.filters.size());
+                for (const auto& f : m_filters.filters) {
+                    enc_encode_string(file, f->name());
+                    f->encode(file);
+                }
+                file.close();
+            }
+        }
+        s.write(" ");
+        if (s.write_button("Load")) {
+            NFD::UniquePath load_path;
+            const nfdfilteritem_t filters[1] = {{"Signalbox Sequence", "sbxsq"}};
+
+            const auto result = NFD::OpenDialog(load_path, filters, 1);
+            if (result == NFD_OKAY) {
+                std::lock_guard lock{m_filters.mut};
+                std::fstream file{load_path.get(), std::ios::in | std::ios::binary};
+
+                const auto num_filters = enc_decode_one<uint32>(file);
+                m_filters.filters.clear();
+                m_filters.filters.reserve(num_filters);
+                m_filter_count = 0;
+                for (size_t i = 0; i < num_filters; ++i) {
+                    const auto name = enc_decode_string(file);
+                    const auto filter = find_filter(name);
+                    if (!filter)
+                        break;
+                    auto f = filter->fn();
+                    f->decode(file);
+                    add_filter(std::move(f), true);
+                }
+
+                file.close();
+            }
+        }
 
         s.end();
 
@@ -431,7 +506,9 @@ void board::reset_layout() {
     m_layout_rect =
         rect2<float32>{
             {panel_width, 0.f},
-            vector2<float32>{static_cast<float32>(width) - panel_width, static_cast<float32>(height)},
+            vector2<float32>{
+                static_cast<float32>(width) / SB_DPI_SCALE(m_dpi_scale) - panel_width,
+                static_cast<float32>(height) / SB_DPI_SCALE(m_dpi_scale)},
         }
             .inflate(-m_config.outer_padding);
 

@@ -11,6 +11,7 @@
 #include <array>
 #include <memory>
 #include <map>
+#include <string_view>
 
 struct GLFWwindow;
 
@@ -37,7 +38,8 @@ class board final {
         std::string out;
     };
 
-    void add_filter(std::unique_ptr<filter_base>&& filter);
+    void add_filter(std::unique_ptr<filter_base>&& filter, bool decoding = false);
+    const filter_info* find_filter(std::string_view name);
 
     space new_spacef(const rect2<float32>& rect);
     void draw_frame();

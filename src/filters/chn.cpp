@@ -51,6 +51,16 @@ std::unique_ptr<filter_base> fltr_chn_split() {
             }
             return {};
         },
+        .encode =
+            [](const data& d, std::ostream& os) {
+                d.encode_chan_in(os);
+                d.encode_chan_out(os);
+            },
+        .decode =
+            [](data& d, std::istream& is) {
+                d.decode_chan_in(is);
+                d.decode_chan_out(is);
+            },
     };
 
     return std::make_unique<filter_fwd<data, none>>(std::move(f));

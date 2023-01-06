@@ -76,6 +76,12 @@ FetchContent_Declare(
     GIT_TAG 31cb30b1f93256d7aa19bfbaf4558c1d35e9b3ba # latest
 )
 
+FetchContent_Declare(
+    nfd
+    GIT_REPOSITORY https://github.com/btzy/nativefiledialog-extended.git
+    GIT_TAG 6efc824070c79afd42a3a9e08da8f867d0ca2a97 # v1.0.1
+)
+
 if(${SB_USE_METAL})
     FetchContent_Declare(
         MetalNanoVG
@@ -84,7 +90,7 @@ if(${SB_USE_METAL})
     )
 endif()
 
-FetchContent_MakeAvailable(glfw nanovg spdlog glew glm freetype miniaudio SPSCQueue RingBuffer muFFT sse_mathfun sse2neon)
+FetchContent_MakeAvailable(glfw nanovg spdlog glew glm freetype miniaudio SPSCQueue RingBuffer muFFT sse_mathfun sse2neon nfd)
 
 add_library(nanovg)
 target_sources(nanovg PRIVATE ${CMAKE_BINARY_DIR}/_deps/nanovg-src/src/nanovg.c)

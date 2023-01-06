@@ -2,6 +2,7 @@
 
 #include "util.h"
 #include "filters/sample.h"
+#include "enc.h"
 
 #include <functional>
 #include <memory>
@@ -10,17 +11,23 @@
 #include <span>
 #include <vector>
 #include <rigtorp/SPSCQueue.h>
+#include <istream>
+#include <ostream>
 
 struct space;
 
 struct fd_chans_in {
     virtual std::span<uint8> chans_in() = 0;
     virtual bool chans_in_is_dynamic() = 0;
+    virtual void encode_chan_in(std::ostream& os) const = 0;
+    virtual void decode_chan_in(std::istream& is) = 0;
 };
 
 struct fd_chans_out {
     virtual std::span<uint8> chans_out() = 0;
     virtual bool chans_out_is_dynamic() = 0;
+    virtual void encode_chan_out(std::ostream& os) const = 0;
+    virtual void decode_chan_out(std::istream& is) = 0;
 };
 
 template <uint32 N, typename = std::enable_if_t<(N > 0)>>
@@ -33,6 +40,14 @@ struct fd_chan_in : fd_chans_in {
 
     bool chans_in_is_dynamic() override {
         return false;
+    }
+
+    void encode_chan_in(std::ostream& os) const override {
+        enc_encode_one<decltype(chan_in)>(os, chan_in);
+    }
+
+    void decode_chan_in(std::istream& is) override {
+        chan_in = enc_decode_one<decltype(chan_in)>(is);
     }
 };
 
@@ -47,6 +62,14 @@ struct fd_chan_in<1> : fd_chans_in {
     bool chans_in_is_dynamic() override {
         return false;
     }
+
+    void encode_chan_in(std::ostream& os) const override {
+        enc_encode_one<decltype(chan_in)>(os, chan_in);
+    }
+
+    void decode_chan_in(std::istream& is) override {
+        chan_in = enc_decode_one<decltype(chan_in)>(is);
+    }
 };
 
 struct fd_chan_vec_in : fd_chans_in {
@@ -58,6 +81,14 @@ struct fd_chan_vec_in : fd_chans_in {
 
     bool chans_in_is_dynamic() override {
         return true;
+    }
+
+    void encode_chan_in(std::ostream& os) const override {
+        enc_encode_span<uint8>(os, chan_in);
+    }
+
+    void decode_chan_in(std::istream& is) override {
+        chan_in = enc_decode_vec<uint8>(is);
     }
 };
 
@@ -72,6 +103,14 @@ struct fd_chan_out : fd_chans_out {
     bool chans_out_is_dynamic() override {
         return false;
     }
+
+    void encode_chan_out(std::ostream& os) const override {
+        enc_encode_one<decltype(chan_out)>(os, chan_out);
+    }
+
+    void decode_chan_out(std::istream& is) override {
+        chan_out = enc_decode_one<decltype(chan_out)>(is);
+    }
 };
 
 template <>
@@ -85,6 +124,14 @@ struct fd_chan_out<1> : fd_chans_out {
     bool chans_out_is_dynamic() override {
         return false;
     }
+
+    void encode_chan_out(std::ostream& os) const override {
+        enc_encode_one<decltype(chan_out)>(os, chan_out);
+    }
+
+    void decode_chan_out(std::istream& is) override {
+        chan_out = enc_decode_one<decltype(chan_out)>(is);
+    }
 };
 
 struct fd_chan_vec_out : fd_chans_out {
@@ -96,6 +143,14 @@ struct fd_chan_vec_out : fd_chans_out {
 
     bool chans_out_is_dynamic() override {
         return true;
+    }
+
+    void encode_chan_out(std::ostream& os) const override {
+        enc_encode_span<uint8>(os, chan_out);
+    }
+
+    void decode_chan_out(std::istream& is) override {
+        chan_out = enc_decode_vec<uint8>(is);
     }
 };
 
@@ -118,6 +173,9 @@ struct filter_base {
 
     virtual fd_chans_in* data_chans_in() = 0;
     virtual fd_chans_out* data_chans_out() = 0;
+
+    virtual void encode(std::ostream& os) = 0;
+    virtual void decode(std::istream& is) = 0;
 };
 
 template <typename TDataIn, typename TDataOut>
@@ -129,6 +187,9 @@ struct filter final {
     std::function<void(TDataIn&, space&)> draw;
     std::function<void(TDataIn&, const TDataOut&)> update;
     std::function<TDataOut(const TDataIn&, channels&)> apply;
+
+    std::function<void(const TDataIn&, std::ostream&)> encode;
+    std::function<void(TDataIn&, std::istream&)> decode;
 };
 
 template <typename TDataIn, typename TDataOut>
@@ -208,6 +269,20 @@ struct filter_fwd final : filter_base {
         } else {
             return nullptr;
         }
+    }
+
+    void encode(std::ostream& os) override {
+        if (f.encode) {
+            return f.encode(f.data, os);
+        }
+        enc_encode_one(os, f.data);
+    }
+
+    void decode(std::istream& is) override {
+        if (f.decode) {
+            return f.decode(f.data, is);
+        }
+        f.data = enc_decode_one<TDataIn>(is);
     }
 };
 

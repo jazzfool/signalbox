@@ -50,7 +50,20 @@ std::unique_ptr<filter_base> fltr_viz_waveform() {
             o.samples = chans.chans[d.chan_in].samples;
             return o;
         },
-    };
+        .encode =
+            [](const data& d, std::ostream& os) {
+                d.encode_chan_in(os);
+
+                enc_encode_one<float32>(os, d.scale);
+                enc_encode_one<float32>(os, d.offset);
+            },
+        .decode =
+            [](data& d, std::istream& is) {
+                d.decode_chan_in(is);
+
+                d.scale = enc_decode_one<float32>(is);
+                d.offset = enc_decode_one<float32>(is);
+            }};
 
     return std::make_unique<filter_fwd<data, out>>(std::move(f));
 }

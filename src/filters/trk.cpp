@@ -3,12 +3,14 @@
 #include "widget.h"
 #include "space.h"
 #include "executor.h"
+#include "enc.h"
 
 #include <miniaudio.h>
 #include <optional>
 #include <filesystem>
 #include <spdlog/fmt/fmt.h>
 #include <cmath>
+#include <sstream>
 
 std::unique_ptr<filter_base> fltr_trk_sampler() {
     struct data : fd_chan_in<1>, fd_chan_out<2> {
@@ -95,12 +97,32 @@ std::unique_ptr<filter_base> fltr_trk_sampler() {
                     d.active_splice = d.splices.size();
                     d.splices.push_back((d.viewer_min + d.viewer_max) / 2);
                 }
+                s.write(" ");
+                if (s.write_button("Del") && d.splices.size() > 1) {
+                    d.splices.erase(d.splices.begin() + d.active_splice);
+                    d.active_splice =
+                        d.active_splice == d.splices.size() ? d.active_splice - 1 : d.active_splice;
+                }
 
                 const auto splice_step = (d.viewer_max - d.viewer_min) / 100;
 
                 s.next_line();
                 s.set_rtl(false);
                 ui_int_ran(s, 0, d.length, splice_step, 6, d.splices[d.active_splice]);
+
+                if (d.active_splice > 0 && d.splices[d.active_splice] < d.splices[d.active_splice - 1]) {
+                    std::swap(d.splices[d.active_splice], d.splices[d.active_splice - 1]);
+                    --d.active_splice;
+                }
+                if (d.active_splice < d.splices.size() - 1 &&
+                    d.splices[d.active_splice] > d.splices[d.active_splice + 1]) {
+                    std::swap(d.splices[d.active_splice], d.splices[d.active_splice + 1]);
+                    ++d.active_splice;
+                }
+                for (size_t i = 0; i < d.splices.size(); ++i) {
+                    if (i > 0 && d.splices[i] == d.splices[i - 1])
+                        d.splices[i] += splice_step / 2;
+                }
             },
         .update =
             [](data& d, const out& o) {
@@ -211,6 +233,32 @@ std::unique_ptr<filter_base> fltr_trk_sampler() {
 
             return o;
         },
+        .encode =
+            [](const data& d, std::ostream& os) {
+                d.encode_chan_in(os);
+                d.encode_chan_out(os);
+
+                enc_encode_string(os, d.path);
+                enc_encode_string(os, d.loaded_path);
+                enc_encode_one<bool>(os, d.loaded);
+                enc_encode_one<int32>(os, d.active_splice);
+                enc_encode_span<int32>(os, d.splices);
+                enc_encode_one<int32>(os, d.viewer_min);
+                enc_encode_one<int32>(os, d.viewer_max);
+            },
+        .decode =
+            [](data& d, std::istream& is) {
+                d.decode_chan_in(is);
+                d.decode_chan_out(is);
+
+                d.path = enc_decode_string(is);
+                d.loaded_path = enc_decode_string(is);
+                d.loaded = enc_decode_one<bool>(is);
+                d.active_splice = enc_decode_one<int32>(is);
+                d.splices = enc_decode_vec<int32>(is);
+                d.viewer_min = enc_decode_one<int32>(is);
+                d.viewer_max = enc_decode_one<int32>(is);
+            },
     };
 
     return make_filter(std::move(f));

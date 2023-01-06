@@ -5,6 +5,7 @@
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 
+#include <nanovg.h>
 #define NANOVG_GL3_IMPLEMENTATION
 #include <nanovg_gl.h>
 
@@ -28,19 +29,19 @@ context create_context() {
 
     cx.window = glfwCreateWindow(400, 300, "Signalbox", NULL, NULL);
 
-    glfwMakeContextCurrent(m_window);
+    glfwMakeContextCurrent(cx.window);
     glfwSwapInterval(0);
 
     glewExperimental = GL_TRUE;
     glewInit();
 
-    m_nvg = nvgCreateGL3(NVG_STENCIL_STROKES | NVG_ANTIALIAS);
+    cx.nvg = nvgCreateGL3(NVG_STENCIL_STROKES | NVG_ANTIALIAS);
 
     return cx;
 }
 
 void destroy_context(context* cx) {
-    nvgDestroyGL3(cx->nvg);
+    nvgDeleteGL3(cx->nvg);
     glfwDestroyWindow(cx->window);
     glfwTerminate();
 }
@@ -50,7 +51,7 @@ void context_begin_frame(context* cx, float r, float g, float b) {
     glfwGetFramebufferSize(cx->window, &fb_width, &fb_height);
 
     glViewport(0, 0, fb_width, fb_height);
-    glClearColor(clear_color.r, clear_color.g, clear_color.b, 1.f);
+    glClearColor(r, g, b, 1.f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 }
 

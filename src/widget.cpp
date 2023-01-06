@@ -345,23 +345,25 @@ void ui_viz_sample(
 
     const auto rect = outer_rect.inflate(-2.f);
 
-    const auto samples_slice = samples.slice(first / scale, (last - first) / scale);
-    const auto inv_samples_slice_sz = 1.f / static_cast<float32>(samples_slice.size());
+    if (first / scale <= samples.size() && last / scale <= samples.size()) {
+        const auto samples_slice = samples.slice(first / scale, (last - first) / scale);
+        const auto inv_samples_slice_sz = 1.f / static_cast<float32>(samples_slice.size());
 
-    nvgSave(nvg);
-    nvgIntersectScissor(nvg, rect.pos.x, rect.pos.y, rect.size.x, rect.size.y);
-    nvgBeginPath(nvg);
-    for (uint64 i = 0; i < samples_slice.size(); ++i) {
-        const auto x = static_cast<float32>(i) * inv_samples_slice_sz;
-        const auto y = samples_slice[i];
+        nvgSave(nvg);
+        nvgIntersectScissor(nvg, rect.pos.x, rect.pos.y, rect.size.x, rect.size.y);
+        nvgBeginPath(nvg);
+        for (uint64 i = 0; i < samples_slice.size(); ++i) {
+            const auto x = static_cast<float32>(i) * inv_samples_slice_sz;
+            const auto y = samples_slice[i];
 
-        (i == 0 ? nvgMoveTo
-                : nvgLineTo)(nvg, rect.pos.x + x * rect.size.x, rect.pos.y + rect.size.y * (1.f - y) / 2.f);
+            (i == 0 ? nvgMoveTo : nvgLineTo)(
+                nvg, rect.pos.x + x * rect.size.x, rect.pos.y + rect.size.y * (1.f - y) / 2.f);
+        }
+        nvgStrokeColor(nvg, stroke);
+        nvgStrokeWidth(nvg, 1.f);
+        nvgStroke(nvg);
+        nvgRestore(nvg);
     }
-    nvgStrokeColor(nvg, stroke);
-    nvgStrokeWidth(nvg, 1.f);
-    nvgStroke(nvg);
-    nvgRestore(nvg);
 
     const auto inv_length = 1.f / (float32)length;
 
@@ -386,10 +388,10 @@ void ui_viz_sample(
         const auto x =
             rect.pos.x +
             rect.size.x * remap((float32)first, (float32)last, 0.f, 1.f, (float32)splices[active_splice]);
-        nvgMoveTo(nvg, x, rect.pos.y);
-        nvgLineTo(nvg, x, rect.max().y);
+        nvgMoveTo(nvg, std::round(x) + 0.5f, rect.pos.y);
+        nvgLineTo(nvg, std::round(x) + 0.5f, rect.max().y);
         nvgStrokeColor(nvg, space.config().colors.yellow);
-        nvgStrokeWidth(nvg, 2.f);
+        nvgStrokeWidth(nvg, 1.f);
         nvgStroke(nvg);
     }
 

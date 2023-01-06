@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.12)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-project(Signalbox C CXX OBJC)
+project(Signalbox C CXX)
 
 set(Source
     src/board.cpp
@@ -12,6 +12,7 @@ set(Source
     src/space.cpp
     src/widget.cpp
     src/context_gl.c
+    src/enc.cpp
 
     src/filters/chn.cpp
     src/filters/executor.cpp
@@ -31,6 +32,7 @@ if (${APPLE})
 endif()
 
 if (${SB_USE_METAL})
+    enable_language(OBJC)
     set(Source ${Source} src/context_mtl.m)
 endif()
 
@@ -38,7 +40,7 @@ add_executable(Signalbox ${Source})
 
 add_subdirectory(ext)
 
-target_link_libraries(Signalbox PRIVATE glfw nanovg spdlog::spdlog libglew_static glm miniaudio SPSCQueue RingBuffer muFFT sse_mathfun sse2neon)
+target_link_libraries(Signalbox PRIVATE glfw nanovg spdlog::spdlog libglew_static glm miniaudio SPSCQueue RingBuffer muFFT sse_mathfun sse2neon nfd)
 if (${SB_USE_METAL})
     target_link_libraries(Signalbox PRIVATE MetalNanoVG)
     target_compile_definitions(Signalbox PRIVATE SB_USE_METAL)

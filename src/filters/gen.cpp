@@ -200,6 +200,28 @@ std::unique_ptr<filter_base> fltr_gen_file() {
 
             return o;
         },
+        .encode =
+            [](const data& d, std::ostream& os) {
+                d.encode_chan_out(os);
+
+                enc_encode_string(os, d.path);
+                enc_encode_string(os, d.loaded_path);
+                enc_encode_one<bool>(os, d.loaded);
+                enc_encode_one<bool>(os, d.looping);
+                enc_encode_one<bool>(os, d.muted);
+                enc_encode_one<bool>(os, d.paused);
+            },
+        .decode =
+            [](data& d, std::istream& is) {
+                d.decode_chan_out(is);
+
+                d.path = enc_decode_string(is);
+                d.loaded_path = enc_decode_string(is);
+                d.loaded = enc_decode_one<bool>(is);
+                d.looping = enc_decode_one<bool>(is);
+                d.muted = enc_decode_one<bool>(is);
+                d.paused = enc_decode_one<bool>(is);
+            },
     };
 
     return std::make_unique<filter_fwd<data, out>>(std::move(f));
