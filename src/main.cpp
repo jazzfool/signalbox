@@ -27,6 +27,7 @@ int main() {
         .register_filter(fltr_viz_vu)
         .register_filter(fltr_chn_split)
         .register_filter(fltr_trk_sampler)
+        .register_filter(fltr_trk_sample_browser)
         .register_filter(fltr_trk_tracker)
         .register_filter(fltr_trk_clock)
         .run_loop()

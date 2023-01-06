@@ -24,6 +24,7 @@ filter_executor::filter_executor(filter_list& filters) : out_status{8}, m_filter
 }
 
 void filter_executor::create() {
+    m_context = {};
     sb_ASSERT(ma_context_init(nullptr, 0, nullptr, &m_context) == MA_SUCCESS);
 
     ma_device_info* playback_devs = nullptr;

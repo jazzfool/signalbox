@@ -11,24 +11,27 @@
 #include <spdlog/fmt/fmt.h>
 #include <cmath>
 #include <sstream>
+#include <nfd.hpp>
+
+struct trk_sampler_data : fd_chan_in<1>, fd_chan_out<2> {
+    std::string path;
+    std::string loaded_path;
+
+    bool loaded = false;
+
+    simd_vec<sample> left_samples;
+    simd_vec<sample> right_samples;
+    uint64 length = 0;
+
+    int32 active_splice = 0;
+    std::vector<int32> splices = {0};
+
+    int32 viewer_min = 0;
+    int32 viewer_max = 0;
+};
 
 std::unique_ptr<filter_base> fltr_trk_sampler() {
-    struct data : fd_chan_in<1>, fd_chan_out<2> {
-        std::string path;
-        std::string loaded_path;
-
-        bool loaded = false;
-
-        simd_vec<sample> left_samples;
-        simd_vec<sample> right_samples;
-        uint64 length = 0;
-
-        int32 active_splice = 0;
-        std::vector<int32> splices = {0};
-
-        int32 viewer_min = 0;
-        int32 viewer_max = 0;
-    };
+    using data = trk_sampler_data;
 
     struct out {
         std::optional<simd_vec<sample>> left_samples;
@@ -70,9 +73,11 @@ std::unique_ptr<filter_base> fltr_trk_sampler() {
                 s.next_line();
                 s.set_rtl(false);
                 s.write("File: ");
-                ui_text_in(s, !d.loaded ? s.config().colors.red : s.config().colors.fg, d.path, 24);
+                ui_filepath_in(
+                    s, !d.loaded ? s.config().colors.red : s.config().colors.editable, d.path,
+                    "Select audio file", 24);
 
-                if (s.focus != &d.path && d.path != d.loaded_path) {
+                if (d.path != d.loaded_path) {
                     d.loaded = std::filesystem::exists(d.path) && std::filesystem::is_regular_file(d.path);
                     d.loaded_path = d.path;
                 }
@@ -258,6 +263,175 @@ std::unique_ptr<filter_base> fltr_trk_sampler() {
                 d.splices = enc_decode_vec<int32>(is);
                 d.viewer_min = enc_decode_one<int32>(is);
                 d.viewer_max = enc_decode_one<int32>(is);
+            },
+    };
+
+    return make_filter(std::move(f));
+}
+
+std::unique_ptr<filter_base> fltr_trk_sample_browser() {
+    static constexpr auto populate = [](const std::string& dir, std::vector<std::string>& out_folders,
+                                        std::vector<std::string>& out_files) {
+        out_folders.clear();
+        out_files.clear();
+        for (const auto& entry : std::filesystem::directory_iterator(dir)) {
+            if (entry.is_directory()) {
+                out_folders.push_back(entry.path().filename().string());
+            } else if (entry.is_regular_file()) {
+                const auto ext = entry.path().extension().string();
+                const auto is_audio = ext == ".mp3" || ext == ".wav" || ext == ".flac";
+                if (is_audio)
+                    out_files.push_back(entry.path().filename().string());
+            }
+        }
+    };
+
+    struct data : fd_chan_out<2> {
+        data() : dir{"C:/"} {
+            populate(dir, folders, files);
+        }
+
+        int32 page_num = 1;
+        std::string dir;
+        std::vector<std::string> folders;
+        std::vector<std::string> files;
+
+        std::optional<std::string> preview_file;
+        uint32 restart_sema = 0;
+    };
+
+    struct locals {
+        std::string path;
+        std::string loaded_path;
+        ma_decoder decoder;
+        bool loaded = false;
+        uint32 restart_sema = 0;
+    };
+
+    auto f = filter<data, none>{
+        .name = "TRK-SAMPLEBROWSER",
+        .kind = filter_kind::trk,
+        .data = {},
+        .size =
+            [](const data&) {
+                return vector2<uint32>{35, 21};
+            },
+        .draw =
+            [](data& d, space& s) {
+                auto changed_dir = false;
+                const auto fs_dir = std::filesystem::path{d.dir};
+
+                s.set_rtl(true);
+                ui_chan_sel(s, d.chan_out[0]);
+                s.write("Channel Preview OUT LEFT ");
+
+                s.next_line();
+                ui_chan_sel(s, d.chan_out[1]);
+                s.write("Channel Preview OUT RIGHT ");
+
+                s.next_line();
+                s.set_rtl(false);
+                if (ui_filepath_in(s, s.config().colors.editable, d.dir, "", 35, true)) {
+                    changed_dir = true;
+                }
+
+                s.next_line();
+                if (s.write_button("..") && fs_dir.has_parent_path()) {
+                    changed_dir = true;
+                    d.dir = fs_dir.parent_path().string();
+                }
+                s.set_rtl(true);
+                const auto total = d.folders.size() + d.files.size();
+                const auto num_pages = total / 16 + (total % 16 > 0 ? 1 : 0);
+                ui_int_ran(s, 1, num_pages, 1, 2, d.page_num);
+                s.write("Page ");
+                s.set_rtl(false);
+
+                auto i = (d.page_num - 1) * 16;
+                const auto i_max = i + 16;
+
+                for (; i < d.folders.size() && i < i_max; ++i) {
+                    s.next_line();
+                    s.set_color(s.config().colors.yellow);
+                    if (s.write_button(d.folders[i])) {
+                        changed_dir = true;
+                        d.dir = (fs_dir / d.folders[i]).string();
+                    }
+                }
+
+                i -= d.folders.size();
+                for (; i < d.files.size() && i < i_max; ++i) {
+                    s.next_line();
+                    s.set_color(s.config().colors.green);
+                    if (s.write_hover(d.files[i], s.color(), s.config().colors.bg)) {
+                        const auto path = (fs_dir / d.files[i]).string();
+                        if (s.input().mouse_just_pressed[0]) {
+                            d.preview_file = path;
+                            ++d.restart_sema;
+                        }
+                        if (s.input().mouse_just_pressed[1]) {
+                            s.cb_add_filter("TRK-SAMPLER", [path](filter_base* sampler) {
+                                const auto p = reinterpret_cast<trk_sampler_data*>(sampler->data());
+                                p->path = path;
+                            });
+                        }
+                    }
+                }
+
+                if (changed_dir) {
+                    populate(d.dir, d.folders, d.files);
+                }
+            },
+        .update = [](data&, const none&) {},
+        .apply = [l = locals{}](const data& d, channels& chans) mutable -> none {
+            if (d.preview_file && d.preview_file != l.path) {
+                l.path = *d.preview_file;
+                if (l.loaded) {
+                    ma_decoder_uninit(&l.decoder);
+                }
+                auto config = ma_decoder_config_init(ma_format_f32, 2, IO_SAMPLE_RATE);
+                auto res = ma_decoder_init_file(l.path.c_str(), &config, &l.decoder);
+                l.loaded = res == MA_SUCCESS;
+            } else if (!d.preview_file || !l.loaded) {
+                if (l.loaded) {
+                    ma_decoder_uninit(&l.decoder);
+                }
+                l.loaded = false;
+                return {};
+            }
+
+            if (d.restart_sema != l.restart_sema) {
+                l.restart_sema = d.restart_sema;
+                ma_decoder_seek_to_pcm_frame(&l.decoder, 0);
+            }
+
+            auto sams = std::vector<sample>{};
+            sams.resize(2 * IO_FRAME_COUNT, 0.f);
+
+            ma_decoder_read_pcm_frames(&l.decoder, sams.data(), IO_FRAME_COUNT, nullptr);
+
+            auto& left = chans.chans[d.chan_out[0]].samples;
+            auto& right = chans.chans[d.chan_out[1]].samples;
+
+            left.resize(IO_FRAME_COUNT, 0.f);
+            right.resize(IO_FRAME_COUNT, 0.f);
+
+            for (uint32 i = 0; i < IO_FRAME_COUNT; ++i) {
+                left[i] = sams[i * 2 + 0];
+                right[i] = sams[i * 2 + 1];
+            }
+
+            return {};
+        },
+        .encode =
+            [](const data& d, std::ostream& os) {
+                d.encode_chan_out(os);
+                enc_encode_string(os, d.dir);
+            },
+        .decode =
+            [](data& d, std::istream& is) {
+                d.decode_chan_out(is);
+                d.dir = enc_decode_string(is);
             },
     };
 

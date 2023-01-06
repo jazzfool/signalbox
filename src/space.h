@@ -4,6 +4,7 @@
 #include "state.h"
 
 #include <string>
+#include <functional>
 
 struct GLFWwindow;
 struct NVGcontext;
@@ -41,6 +42,8 @@ class space final {
 
     void*& focus;
     bool& did_focus;
+
+    std::function<void(std::string_view, std::function<void(filter_base*)>&&)> cb_add_filter;
 
   private:
     float32 advance_layout_x(float32 x);

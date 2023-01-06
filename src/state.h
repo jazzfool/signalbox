@@ -14,10 +14,12 @@ struct board_colors final {
     NVGcolor bg;
     NVGcolor fg;
     NVGcolor frame;
+    NVGcolor frame_bg;
     NVGcolor semifaint;
     NVGcolor faint;
     NVGcolor hover;
-    NVGcolor focus;
+    NVGcolor editable;
+    NVGcolor focus_frame;
     NVGcolor red;
     NVGcolor green;
     NVGcolor blue;
@@ -32,11 +34,13 @@ struct board_colors final {
         return board_colors{
             .bg = nvgRGB(0, 0, 0),
             .fg = nvgRGB(255, 255, 255),
-            .frame = nvgRGB(100, 100, 100),
+            .frame = nvgRGB(50, 50, 50),
+            .frame_bg = nvgRGB(10, 10, 10),
             .semifaint = nvgRGB(120, 120, 120),
             .faint = nvgRGB(50, 50, 50),
             .hover = nvgRGB(100, 100, 100),
-            .focus = nvgRGB(30, 30, 30),
+            .editable = nvgRGB(0, 0, 0),
+            .focus_frame = nvgRGB(255, 208, 0),
             .red = nvgRGB(247, 47, 80),
             .green = nvgRGB(107, 255, 127),
             .blue = nvgRGB(76, 89, 252),
@@ -74,7 +78,7 @@ struct board_config final {
 struct input_state final {
     std::array<bool, GLFW_KEY_LAST> keys_just_pressed;
     vector2<float32> cursor_pos = {0.f, 0.f};
-    std::array<bool, 3> mouse_just_pressed = {false, false, false};
+    std::array<bool, GLFW_MOUSE_BUTTON_LAST> mouse_just_pressed = fill_array<bool, GLFW_MOUSE_BUTTON_LAST>(false);
     float32 scroll_wheel = 0.f;
     std::optional<char32> text = {};
 

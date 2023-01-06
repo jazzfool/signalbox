@@ -95,6 +95,10 @@ constexpr std::array<T, N> fill_array(const T& value) {
     return ret;
 }
 
+inline float32 lerp(float32 a, float32 b, float32 t) {
+    return a * (1.f - t) + b * t;
+}
+
 struct none final {};
 
 inline uint32 str_distance(std::string_view a, std::string_view b) {

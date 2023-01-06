@@ -176,6 +176,8 @@ struct filter_base {
 
     virtual void encode(std::ostream& os) = 0;
     virtual void decode(std::istream& is) = 0;
+
+    virtual void* data() = 0;
 };
 
 template <typename TDataIn, typename TDataOut>
@@ -283,6 +285,10 @@ struct filter_fwd final : filter_base {
             return f.decode(f.data, is);
         }
         f.data = enc_decode_one<TDataIn>(is);
+    }
+
+    void* data() override {
+        return &f.data;
     }
 };
 

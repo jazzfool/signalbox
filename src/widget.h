@@ -24,7 +24,8 @@ void ui_float(space& space, float32 step, float32& x);
 void ui_int_ran(space& space, int32 min, int32 max, int32 step, uint8 pad, int32& x);
 void ui_int(space& space, int32 step, uint8 pad, int32& x);
 void ui_tracker_note(space& space, tracker_note& note);
-void ui_text_in(space& space, NVGcolor color, std::string& s, uint32 len);
+void ui_text_in(space& space, NVGcolor color, std::string& s, const std::string& placeholder, uint32 len);
+bool ui_filepath_in(space& space, NVGcolor color, std::string& s, const std::string& placeholder, uint32 len, bool dir_mode = false);
 void ui_viz_sine(space& space, NVGcolor stroke, uint32 lines, uint32 samples, float32 ampl, float32 freq);
 void ui_viz_wf(
     space& space, NVGcolor stroke, uint32 lines, float32 scale, float32 offset,

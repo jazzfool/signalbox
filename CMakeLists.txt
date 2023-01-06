@@ -13,6 +13,7 @@ set(Source
     src/widget.cpp
     src/context_gl.c
     src/enc.cpp
+    src/draw.cpp
 
     src/filters/chn.cpp
     src/filters/executor.cpp

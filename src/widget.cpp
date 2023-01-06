@@ -3,6 +3,7 @@
 #include "space.h"
 #include "filters/sample.h"
 #include "filters/trk.h"
+#include "draw.h"
 
 #include <sstream>
 #include <iomanip>
@@ -12,6 +13,7 @@
 #include <codecvt>
 #include <miniaudio.h>
 #include <cmath>
+#include <nfd.hpp>
 
 void ui_chan_btn(space& space, uint8& chan, bool inc) {
     space.set_color(space.config().colors.blue);
@@ -58,16 +60,18 @@ void ui_enum_sel(space& space, std::span<const std::string> options, bool wrap, 
 
     ui_enum_btn(space, i, options.size(), wrap, rtl);
 
-    space.set_color(space.config().colors.fg);
-    if (space.write_hover(
-            options[i] + std::string(max_sz - options[i].size(), '.'), space.config().colors.hover,
-            space.color())) {
-        const auto scroll = static_cast<uint8>(std::abs(space.input().scroll_wheel));
-        if (space.input().scroll_wheel > 0.f && (wrap || i < options.size() - 1))
-            i += scroll;
-        else if (space.input().scroll_wheel < 0.f && (wrap || i > 0))
-            i -= scroll;
-        i %= options.size();
+    if (options.size() > 0) {
+        space.set_color(space.config().colors.fg);
+        if (space.write_hover(
+                options[i] + std::string(max_sz - options[i].size(), '.'), space.config().colors.hover,
+                space.color())) {
+            const auto scroll = static_cast<uint8>(std::abs(space.input().scroll_wheel));
+            if (space.input().scroll_wheel > 0.f && (wrap || i < options.size() - 1))
+                i += scroll;
+            else if (space.input().scroll_wheel < 0.f && (wrap || i > 0))
+                i -= scroll;
+            i %= options.size();
+        }
     }
 
     ui_enum_btn(space, i, options.size(), wrap, !rtl);
@@ -169,25 +173,36 @@ void ui_tracker_note(space& space, tracker_note& note) {
     }
 }
 
-void ui_text_in(space& space, NVGcolor color, std::string& s, uint32 len) {
-    const auto str =
-        std::string{std::string_view{s.size() < len ? s + std::string(len - s.size(), ' ') : s}.substr(
-            space.focus == &s && s.size() > len ? s.size() - len : 0,
-            space.focus == &s ? std::string::npos : len)};
+void ui_text_in(space& space, NVGcolor color, std::string& s, const std::string& placeholder, uint32 len) {
+    const auto base_str = s.empty() ? placeholder : s;
+    const auto str = std::string{
+        std::string_view{base_str.size() < len ? base_str + std::string(len - s.size(), ' ') : base_str}
+            .substr(
+                space.focus == &base_str && base_str.size() > len ? s.size() - len : 0,
+                space.focus == &base_str ? std::string::npos : len)};
     const auto bounds = space.measure(str);
 
     const auto nvg = space.nvg();
-    if (space.focus == &s) {
-        nvgBeginPath(nvg);
-        nvgRoundedRect(nvg, bounds.pos.x, bounds.pos.y, bounds.size.x, bounds.size.y, 2.f);
-        nvgFillColor(nvg, space.config().colors.focus);
-        nvgFill(nvg);
+
+    draw_fill_rrect(nvg, bounds, 2.f, space.config().colors.editable);
+
+    if (s.empty()) {
+        color.a = 0.6f;
     }
 
     space.set_color(color);
-    const auto hover = space.write_hover(
-        str, space.focus == &s ? space.config().colors.focus : space.config().colors.hover, color);
+    const auto hover = space.write_hover(str, space.config().colors.editable, color);
     space.set_color(space.config().colors.fg);
+
+    if (space.focus == &s) {
+        draw_stroke_rrect(
+            nvg, bounds.inflate(2.f).translate({0.f, -2.f}).half_round(), 2.f,
+            space.config().colors.focus_frame, 1.f);
+    } else {
+        draw_stroke_rrect(
+            nvg, bounds.inflate(1.f).translate({0.f, -2.f}).half_round(), 2.f, space.config().colors.frame,
+            1.f);
+    }
 
     if (space.focus == &s) {
         if (space.input().text) {
@@ -207,6 +222,41 @@ void ui_text_in(space& space, NVGcolor color, std::string& s, uint32 len) {
         space.did_focus = true;
         s.clear();
     }
+}
+
+bool ui_filepath_in(
+    space& space, NVGcolor color, std::string& s, const std::string& placeholder, uint32 len, bool dir_mode) {
+    const auto base_str = s.empty() ? placeholder : s;
+    const auto str =
+        base_str.size() < len ? base_str + std::string(len - base_str.size(), ' ') : base_str.substr(0, len);
+    const auto bounds = space.measure(str).inflate(1.f).translate({0.f, -2.f});
+
+    const auto nvg = space.nvg();
+
+    color = blend_color(space.config().colors.editable, color, 0.25f);
+    draw_fill_rrect(nvg, bounds, 2.f, color);
+
+    space.set_color(space.config().colors.fg);
+    auto ok = false;
+    if (space.write_hover(str, color, space.config().colors.fg) && space.input().mouse_just_pressed[0]) {
+        NFD::UniquePath path;
+
+        nfdresult_t res;
+        if (dir_mode) {
+            res = NFD::PickFolder(path);
+        } else {
+            res = NFD::OpenDialog(path);
+        }
+
+        ok = res == NFD_OKAY;
+        if (ok) {
+            s = path.get();
+        }
+    }
+
+    draw_stroke_rrect(nvg, bounds.half_round(), 2.f, space.config().colors.frame, 1.f);
+
+    return ok;
 }
 
 void draw_grid(space& space, NVGcolor color, const rect2<float32>& rect, float32 spacing) {

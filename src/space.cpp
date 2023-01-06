@@ -26,12 +26,12 @@ void space::begin() {
 
     nvgBeginPath(m_nvg);
     nvgRoundedRect(m_nvg, NVG_RECT_ARGS(m_outer_rect), 2.f);
-    nvgFillColor(m_nvg, nvgRGB(10, 10, 10));
+    nvgFillColor(m_nvg, m_config.colors.frame_bg);
     nvgFill(m_nvg);
 
     nvgBeginPath(m_nvg);
     nvgRoundedRect(m_nvg, NVG_RECT_ARGS(border_rect), 2.f);
-    nvgStrokeColor(m_nvg, nvgRGB(50, 50, 50));
+    nvgStrokeColor(m_nvg, m_config.colors.frame);
     nvgStrokeWidth(m_nvg, 1.f);
     nvgStroke(m_nvg);
 

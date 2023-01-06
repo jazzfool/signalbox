@@ -266,7 +266,7 @@ void board::draw_frame() {
         s.write("FILTERS");
         s.next_line();
         s.set_bold(false);
-        ui_text_in(s, m_config.colors.fg, m_filter_search, m_panel_width - 3);
+        ui_text_in(s, m_config.colors.fg, m_filter_search, "Search...", m_panel_width - 3);
         s.next_line();
 
         using filter_iterator = std::vector<filter_info>::iterator;
@@ -434,12 +434,18 @@ void board::draw_frame() {
 
     auto swapped = std::optional<std::array<decltype(m_filters.filters)::iterator, 2>>{};
     auto deleted = std::optional<decltype(m_filters.filters)::iterator>{};
+    std::vector<std::pair<std::string, std::function<void(filter_base*)>>> added;
+
+    auto cb_add_filter = [&](std::string_view name, std::function<void(filter_base*)>&& cb) {
+        added.push_back(std::make_pair(std::string{name}, std::move(cb)));
+    };
 
     for (auto it = m_filters.filters.begin(); it != m_filters.filters.end(); ++it) {
         auto& f = **it;
         const auto idx = std::distance(m_filters.filters.begin(), it);
 
         auto space = make_space(f.size());
+        space.cb_add_filter = cb_add_filter;
         space.begin();
 
         space.set_bold(true);
@@ -483,6 +489,14 @@ void board::draw_frame() {
         std::iter_swap((*swapped)[0], (*swapped)[1]);
     }
 
+    for (const auto& [name, cb] : added) {
+        const auto found = find_filter(name);
+        sb_ASSERT(found);
+        auto f = found->fn();
+        cb(f.get());
+        add_filter(std::move(f));
+    }
+
     if (!m_did_focus && m_input.mouse_just_pressed[0]) {
         m_focus = nullptr;
     }
@@ -490,7 +504,7 @@ void board::draw_frame() {
     nvgEndFrame(m_cx.nvg);
 
     m_input.keys_just_pressed.fill(false);
-    m_input.mouse_just_pressed = {false, false, false};
+    m_input.mouse_just_pressed.fill(false);
     m_input.scroll_wheel = 0.f;
     m_input.text.reset();
     m_did_focus = false;

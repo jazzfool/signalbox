@@ -103,7 +103,8 @@ std::unique_ptr<filter_base> fltr_gen_file() {
                 s.next_line();
                 s.set_rtl(false);
                 s.write("File: ");
-                ui_text_in(s, !d.loaded ? s.config().colors.red : s.config().colors.fg, d.path, 24);
+                ui_filepath_in(
+                    s, !d.loaded ? s.config().colors.red : s.config().colors.fg, d.path, "Filepath", 24);
 
                 if (s.focus != &d.path && d.path != d.loaded_path) {
                     d.loaded = std::filesystem::exists(d.path) && std::filesystem::is_regular_file(d.path);
