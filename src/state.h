@@ -79,6 +79,7 @@ struct input_state final {
     std::array<bool, GLFW_KEY_LAST> keys_just_pressed;
     vector2<float32> cursor_pos = {0.f, 0.f};
     std::array<bool, GLFW_MOUSE_BUTTON_LAST> mouse_just_pressed = fill_array<bool, GLFW_MOUSE_BUTTON_LAST>(false);
+    std::array<bool, GLFW_MOUSE_BUTTON_LAST> mouse_just_released = fill_array<bool, GLFW_MOUSE_BUTTON_LAST>(false);
     float32 scroll_wheel = 0.f;
     std::optional<char32> text = {};
 

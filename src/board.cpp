@@ -8,6 +8,7 @@
 #include <map>
 #include <nfd.hpp>
 #include <fstream>
+#include <glm/geometric.hpp>
 
 #ifdef __APPLE__
 #define SB_DPI_SCALE(X) 1.f
@@ -47,6 +48,8 @@ board& board::create() {
         auto& b = *reinterpret_cast<board*>(glfwGetWindowUserPointer(window));
         if (action == GLFW_PRESS)
             b.m_input.mouse_just_pressed[button] = true;
+        else if (action == GLFW_RELEASE)
+            b.m_input.mouse_just_released[button] = true;
     });
 
     glfwSetScrollCallback(m_cx.window, [](GLFWwindow* window, float64 xScroll, float64 yScroll) {
@@ -440,13 +443,22 @@ void board::draw_frame() {
         added.push_back(std::make_pair(std::string{name}, std::move(cb)));
     };
 
+    struct drag_point {
+        size_t i;
+        vector2<float32> start;
+        float32 length;
+    };
+    std::vector<drag_point> drags;
+
     for (auto it = m_filters.filters.begin(); it != m_filters.filters.end(); ++it) {
         auto& f = **it;
-        const auto idx = std::distance(m_filters.filters.begin(), it);
+        const size_t idx = std::distance(m_filters.filters.begin(), it);
 
         auto space = make_space(f.size());
         space.cb_add_filter = cb_add_filter;
         space.begin();
+
+        drags.push_back({idx, space.rect().pos, space.rect().size.y});
 
         space.set_bold(true);
         space.set_color(m_config.colors.red);
@@ -459,7 +471,10 @@ void board::draw_frame() {
             swapped = {it, it - 1};
         }
         space.set_color(m_config.colors.fg);
-        space.write(fmt::format("{:03}", idx));
+        if (space.write_hover(fmt::format("{:03}", idx), m_config.colors.bg, m_config.colors.fg) &&
+            m_input.mouse_just_pressed[0] && !m_dragging_filter) {
+            m_dragging_filter = idx;
+        }
         space.set_color(m_config.colors.yellow);
         if (space.write_button(">") && it != m_filters.filters.end() - 1) {
             swapped = {it, it + 1};
@@ -476,6 +491,38 @@ void board::draw_frame() {
         f.update();
         f.draw(space);
         space.end();
+    }
+
+    if (m_dragging_filter) {
+        size_t i_min = 0;
+        float32 min = FLT_MAX;
+        vector2<float32> start;
+        vector2<float32> end;
+        for (size_t i = 0; i < drags.size(); ++i) {
+            const auto pt_min = drags[i].start;
+            const auto pt_max = drags[i].start + vector2<float32>{0.f, drags[i].length};
+            const auto d = std::min(
+                glm::distance(pt_min, m_input.cursor_pos), glm::distance(pt_max, m_input.cursor_pos));
+            if (d < min) {
+                start = pt_min;
+                end = pt_max;
+                min = d;
+                i_min = i;
+            }
+        }
+
+        nvgBeginPath(m_cx.nvg);
+        nvgMoveTo(m_cx.nvg, start.x - 2.f, start.y);
+        nvgLineTo(m_cx.nvg, end.x - 2.f, end.y);
+        nvgStrokeColor(m_cx.nvg, m_config.colors.red);
+        nvgStrokeWidth(m_cx.nvg, 2.f);
+        nvgStroke(m_cx.nvg);
+
+        if (m_input.mouse_just_released[0]) {
+            std::lock_guard lock{m_filters.mut};
+            std::swap(m_filters.filters[i_min], m_filters.filters[*m_dragging_filter]);
+            m_dragging_filter.reset();
+        }
     }
 
     // practically mutually exclusive anyway but eh
@@ -505,6 +552,7 @@ void board::draw_frame() {
 
     m_input.keys_just_pressed.fill(false);
     m_input.mouse_just_pressed.fill(false);
+    m_input.mouse_just_released.fill(false);
     m_input.scroll_wheel = 0.f;
     m_input.text.reset();
     m_did_focus = false;
