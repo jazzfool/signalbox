@@ -55,7 +55,7 @@ class board final {
     vector2<float32> m_layout_cursor;
     float32 m_max_layout_height;
     uint32 m_panel_width;
-    std::optional<size_t> m_dragging_filter;
+    std::optional<std::unique_ptr<filter_base>> m_dragging_filter;
 
     input_state m_input;
     void* m_focus;

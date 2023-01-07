@@ -3,6 +3,7 @@
 #include "util.h"
 #include "widget.h"
 #include "enc.h"
+#include "draw.h"
 
 #include <spdlog/spdlog.h>
 #include <map>
@@ -450,6 +451,7 @@ void board::draw_frame() {
     };
     std::vector<drag_point> drags;
 
+    std::optional<size_t> dragging_filter_idx;
     for (auto it = m_filters.filters.begin(); it != m_filters.filters.end(); ++it) {
         auto& f = **it;
         const size_t idx = std::distance(m_filters.filters.begin(), it);
@@ -473,7 +475,7 @@ void board::draw_frame() {
         space.set_color(m_config.colors.fg);
         if (space.write_hover(fmt::format("{:03}", idx), m_config.colors.bg, m_config.colors.fg) &&
             m_input.mouse_just_pressed[0] && !m_dragging_filter) {
-            m_dragging_filter = idx;
+            dragging_filter_idx = idx;
         }
         space.set_color(m_config.colors.yellow);
         if (space.write_button(">") && it != m_filters.filters.end() - 1) {
@@ -491,6 +493,14 @@ void board::draw_frame() {
         f.update();
         f.draw(space);
         space.end();
+    }
+
+    drags.push_back({m_filters.filters.size(), m_layout_cursor, drags.empty() ? 20.f : drags.back().length});
+
+    if (dragging_filter_idx) {
+        std::lock_guard lock{m_filters.mut};
+        m_dragging_filter = std::move(m_filters.filters[*dragging_filter_idx]);
+        m_filters.filters.erase(m_filters.filters.begin() + *dragging_filter_idx);
     }
 
     if (m_dragging_filter) {
@@ -518,10 +528,29 @@ void board::draw_frame() {
         nvgStrokeWidth(m_cx.nvg, 2.f);
         nvgStroke(m_cx.nvg);
 
+        const auto& name = (*m_dragging_filter)->name();
+        float out_bounds[4] = {};
+        nvgTextAlign(m_cx.nvg, NVG_ALIGN_BOTTOM | NVG_ALIGN_LEFT);
+        nvgFontFace(m_cx.nvg, "mono");
+        nvgFontSize(m_cx.nvg, m_config.font_size);
+        nvgTextBounds(
+            m_cx.nvg, m_input.cursor_pos.x, m_input.cursor_pos.y, name.c_str(), nullptr, out_bounds);
+        const auto bounds =
+            rect2<float32>{
+                {out_bounds[0], out_bounds[1]},
+                {out_bounds[2] - out_bounds[0], out_bounds[3] - out_bounds[1]}}
+                .inflate(4.f)
+                .half_round();
+        draw_fill_rrect(m_cx.nvg, bounds, 2.f, m_config.colors.bg);
+        nvgFillColor(m_cx.nvg, m_config.colors.filters[(*m_dragging_filter)->kind()]);
+        nvgText(m_cx.nvg, m_input.cursor_pos.x, m_input.cursor_pos.y, name.c_str(), nullptr);
+        draw_stroke_rrect(m_cx.nvg, bounds, 2.f, m_config.colors.frame, 1.f);
+
         if (m_input.mouse_just_released[0]) {
             std::lock_guard lock{m_filters.mut};
-            std::swap(m_filters.filters[i_min], m_filters.filters[*m_dragging_filter]);
+            auto f = std::move(*m_dragging_filter);
             m_dragging_filter.reset();
+            m_filters.filters.insert(m_filters.filters.begin() + i_min, std::move(f));
         }
     }
 
