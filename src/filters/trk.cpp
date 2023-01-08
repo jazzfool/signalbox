@@ -4,6 +4,7 @@
 #include "space.h"
 #include "executor.h"
 #include "enc.h"
+#include "draw.h"
 
 #include <miniaudio.h>
 #include <optional>
@@ -12,6 +13,8 @@
 #include <cmath>
 #include <sstream>
 #include <nfd.hpp>
+
+static constexpr uint8 TRK_LINESEL = 1;
 
 struct trk_sampler_data : fd_chan_in<1>, fd_chan_out<2> {
     std::string path;
@@ -196,15 +199,16 @@ std::unique_ptr<filter_base> fltr_trk_sampler() {
             sams.resize(2 * IO_FRAME_COUNT, 0.f);
 
             if (!bytes_in.bytes.empty()) {
-                const auto note = *reinterpret_cast<const tracker_note*>(&bytes_in.bytes[0]);
+                const auto line = *reinterpret_cast<const tracker_line*>(&bytes_in.bytes[0]);
+                const auto note0 = line.notes[0];
 
-                switch (note.mode) {
+                switch (get_note_mode(note0)) {
                 case tracker_note_mode::on: {
-                    if (note.index < d.splices.size()) {
-                        const auto frame = d.splices[note.index];
-                        const auto length = note.index == d.splices.size() - 1
-                                                ? d.length - frame
-                                                : d.splices[note.index + 1] - frame;
+                    const auto val = get_trkline_value(note0);
+                    if (val < d.splices.size()) {
+                        const auto frame = d.splices[val];
+                        const auto length =
+                            val == d.splices.size() - 1 ? d.length - frame : d.splices[val + 1] - frame;
                         ma_decoder_seek_to_pcm_frame(&l.decoder, frame);
                         l.note_length = length;
                     }
@@ -309,7 +313,7 @@ std::unique_ptr<filter_base> fltr_trk_sample_browser() {
     };
 
     auto f = filter<data, none>{
-        .name = "TRK-SAMPLEBROWSER",
+        .name = "TRK-SAMPLE-BROWSER",
         .kind = filter_kind::trk,
         .data = {},
         .size =
@@ -440,16 +444,29 @@ std::unique_ptr<filter_base> fltr_trk_sample_browser() {
 
 std::unique_ptr<filter_base> fltr_trk_tracker() {
     struct data : fd_chan_in<1>, fd_chan_out<1> {
-        std::array<tracker_note, 16> notes = fill_array<tracker_note, 16>({});
-        size_t active_note = 0;
+        std::array<tracker_line, 256> lines = fill_array<tracker_line, 256>({});
+
+        bool pause = false;
+        float32 bpm = 200.f;
+        int32 lpb = 4;
+        int32 num_lines = 64;
+
+        uint8 num_notes = 1;
+        uint8 num_fx = 1;
+
+        uint32 active_line = 0;
+
+        ui_scroll_state scroll;
     };
 
     struct out {
-        size_t active_note;
+        bool pause = false;
+        uint32 active_line = 0;
     };
 
     struct locals {
-        size_t i = 0;
+        size_t t_m = 0;
+        uint32 line = 0;
     };
 
     auto f = filter<data, out>{
@@ -458,7 +475,7 @@ std::unique_ptr<filter_base> fltr_trk_tracker() {
         .data = {},
         .size =
             [](const data&) {
-                return vector2<uint32>{30, 19};
+                return vector2<uint32>{UINT32_MAX, 16 + 5};
             },
         .draw =
             [](data& d, space& s) {
@@ -470,94 +487,106 @@ std::unique_ptr<filter_base> fltr_trk_tracker() {
                 ui_chan_sel(s, d.chan_out);
                 s.write("Byte Channel TRK OUT ");
 
-                for (uint32 i = 0; i < 16; ++i) {
-                    s.next_line();
-                    s.set_rtl(false);
-                    s.set_color(i == d.active_note ? s.config().colors.yellow : s.config().colors.faint);
-                    s.write(fmt::format("{:02} ", i));
-                    ui_tracker_note(s, d.notes[i]);
-                }
-            },
-        .update = [](data& d, const out& o) { d.active_note = o.active_note; },
-        .apply = [l = locals{}](const data& d, channels& chans) mutable -> out {
-            const auto& bytes_in = chans.byte_chans[d.chan_in];
-
-            if (bytes_in.mode != byte_mode::clock)
-                return {l.i};
-
-            auto& bytes_out = chans.byte_chans[d.chan_out];
-            bytes_out.mode = byte_mode::tracker;
-
-            for (size_t i = 0; i < IO_FRAME_COUNT; ++i) {
-                if (bytes_in.bytes[i] > 0) {
-                    l.i = (l.i + 1) % 16;
-                    const auto p_note = reinterpret_cast<const uint8*>(&d.notes[l.i]);
-                    bytes_out.bytes.insert(bytes_out.bytes.end(), p_note, p_note + sizeof(tracker_note));
-                }
-            }
-
-            return {l.i};
-        },
-    };
-
-    return make_filter(std::move(f));
-}
-
-std::unique_ptr<filter_base> fltr_trk_clock() {
-    struct data : fd_chan_out<1> {
-        bool pause = false;
-        float32 bpm = 200.f;
-        int32 lpb = 4;
-    };
-
-    struct locals {
-        size_t t_m = 0;
-    };
-
-    auto f = filter<data, none>{
-        .name = "TRK-CLOCK",
-        .kind = filter_kind::trk,
-        .size =
-            [](const data&) {
-                return vector2<uint32>{30, 5};
-            },
-        .draw =
-            [](data& d, space& s) {
-                s.set_rtl(true);
-                ui_chan_sel(s, d.chan_out);
-                s.write("Byte Channel CLK OUT ");
-
                 s.next_line();
                 s.set_rtl(false);
+                s.write("BPM: ");
+                ui_float_ran(s, 1.f, 999.f, 1.f, d.bpm);
+                s.write(" LPB: ");
+                ui_int_ran(s, 1, 16, 1, 2, d.lpb);
+                s.write(" Lines: ");
+                ui_int_ran(s, d.lpb, 256, 1, 2, d.num_lines);
+                s.set_rtl(true);
                 s.set_color(s.config().colors.media_control);
                 if (s.write_button(d.pause ? "Play" : "Pause")) {
                     d.pause = !d.pause;
                 }
+
+                s.next_line();
+                s.set_rtl(false);
                 s.set_color(s.config().colors.fg);
+                if (s.write_button("-") && d.num_notes > 0) {
+                    --d.num_notes;
+                }
+                if (s.write_button("+") && d.num_notes < 12) {
+                    ++d.num_notes;
+                }
+                s.set_rtl(true);
+                if (s.write_button("+") && d.num_fx < 8) {
+                    ++d.num_fx;
+                }
+                if (s.write_button("-") && d.num_fx > 0) {
+                    --d.num_fx;
+                }
 
-                s.next_line();
-                s.write("BPM: ");
-                ui_float_ran(s, 1.f, 999.f, 0.5f, d.bpm);
+                static const uint32 TOP_SCROLL_PADDING = 4;
 
-                s.next_line();
-                s.write("LPB: ");
-                ui_int_ran(s, 1, 32, 1, 2, d.lpb);
+                d.scroll.scrollable = false;
+                d.scroll.scroll = d.active_line;
+                d.scroll.lines = 16;
+                d.scroll.inner_lines = d.num_lines + TOP_SCROLL_PADDING;
+                auto vs = ui_begin_vscroll(s, d.scroll);
+
+                for (uint32 i = 0; i < TOP_SCROLL_PADDING; ++i) {
+                    vs.next_line();
+                }
+
+                for (uint32 i = 0; i < d.num_lines; ++i) {
+                    if (i % d.lpb == 0 || i == d.active_line) {
+                        const auto color =
+                            i == d.active_line
+                                ? blend_color(vs.config().colors.bg, vs.config().colors.fg, 0.1f)
+                                : vs.config().colors.bg;
+                        draw_fill_rrect(
+                            vs.nvg(),
+                            rect2<float32>{
+                                {vs.rect().pos.x, vs.layout_cursor().y},
+                                {vs.rect().size.x, vs.config().line_height}},
+                            0.f, color);
+                    }
+
+                    vs.set_rtl(false);
+                    vs.set_color(vs.config().colors.faint);
+                    vs.write(fmt::format("{:02} ", i));
+                    vs.set_rtl(true);
+                    vs.write(fmt::format(" {:02}", i));
+                    ui_tracker_line(vs, d.lines[i], d.num_notes, d.num_fx);
+
+                    vs.next_line();
+                }
+
+                ui_end_vscroll(vs, d.scroll);
+
+                if (vs.scissor().contains(vs.input().cursor_pos)) {
+                    const auto scroll = vs.input().take_scroll();
+                    if (scroll < 0.f && d.active_line < d.num_lines - 1) {
+                        ++d.active_line;
+                    } else if (scroll > 0.f && d.active_line > 0) {
+                        --d.active_line;
+                    }
+                }
             },
-        .update = [](data&, const none&) {},
-        .apply = [l = locals{}](const data& d, channels& chans) mutable -> none {
-            auto& bytes_out = chans.byte_chans[d.chan_out];
+        .update =
+            [](data& d, const out& o) {
+                if (!o.pause) {
+                    d.active_line = o.active_line;
+                }
+            },
+        .apply = [l = locals{}](const data& d, channels& chans) mutable -> out {
+            size_t cur = 0;
 
-            bytes_out.mode = byte_mode::clock;
-            bytes_out.bytes.resize(IO_FRAME_COUNT, 0);
+            auto& bytes_out = chans.byte_chans[d.chan_out];
+            bytes_out.mode = byte_mode::tracker;
 
             if (d.pause)
-                return {};
+                return {true, 0};
 
-            if (l.t_m >= IO_FRAME_COUNT) {
+            if (l.t_m > IO_FRAME_COUNT) {
                 l.t_m -= IO_FRAME_COUNT;
             } else {
-                bytes_out.bytes[l.t_m] = 1;
                 l.t_m = 0;
+                l.line = (l.line + 1) % d.num_lines;
+                const auto p_note = reinterpret_cast<const uint8*>(&d.lines[l.line]);
+                bytes_out.bytes.insert(bytes_out.bytes.end(), p_note, p_note + sizeof(tracker_line));
             }
 
             if (l.t_m == 0) {
@@ -568,7 +597,7 @@ std::unique_ptr<filter_base> fltr_trk_clock() {
                 l.t_m = spl;
             }
 
-            return {};
+            return {false, l.line};
         },
     };
 

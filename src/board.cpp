@@ -87,6 +87,11 @@ board& board::create() {
     nvgCreateFont(m_cx.nvg, "mono", "data/iosevka-fixed-slab-extended.ttf");
     nvgCreateFont(m_cx.nvg, "monoB", "data/iosevka-fixed-slab-extendedbold.ttf");
 
+    nvgCreateFont(m_cx.nvg, "sans", "data/ProzaLibre-Regular.ttf");
+    nvgCreateFont(m_cx.nvg, "sansB", "data/ProzaLibre-Bold.ttf");
+    nvgCreateFont(m_cx.nvg, "sansI", "data/ProzaLibre-Italic.ttf");
+    nvgCreateFont(m_cx.nvg, "sansBI", "data/ProzaLibre-BoldItalic.ttf");
+
     nvgFontFace(m_cx.nvg, "mono");
     nvgFontSize(m_cx.nvg, m_config.font_size);
     nvgTextAlign(m_cx.nvg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
@@ -118,10 +123,11 @@ board& board::run_loop() {
 }
 
 space board::make_space(const vector2<uint32>& text_size) {
-    const auto size = vector2<float32>{
+    auto size = vector2<float32>{
         static_cast<float32>(text_size.x) * m_config.char_width + 2.f * m_config.inner_padding,
         static_cast<float32>(text_size.y) * m_config.line_height + 2.f * m_config.inner_padding,
     };
+    size.x = std::min(m_layout_rect.size.x, size.x);
     return make_spacef(size);
 }
 
@@ -258,8 +264,68 @@ void board::draw_frame() {
     reset_layout();
 
     {
+        m_layout_cursor.y += m_config.line_height;
+
+        auto s = new_spacef(
+            rect2<float32>{{0.f, m_config.inner_padding / 2.f}, {, m_config.line_height}});
+
+        s.set_color(m_config.colors.green);
+        s.set_sans(true);
+        s.set_bold(true);
+        if (s.write_button("Save")) {
+            NFD::UniquePath save_path;
+            const nfdfilteritem_t filters[1] = {{"Signalbox Sequence", "sbxsq"}};
+
+            const auto result = NFD::SaveDialog(save_path, filters, 1);
+            if (result == NFD_OKAY) {
+                std::lock_guard lock{m_filters.mut};
+                std::fstream file{save_path.get(), std::ios::out | std::ios::binary};
+                enc_encode_one<uint32>(file, m_filters.filters.size());
+                for (const auto& f : m_filters.filters) {
+                    enc_encode_string(file, f->name());
+                    f->encode(file);
+                }
+                file.close();
+            }
+        }
+        s.write("   ");
+        if (s.write_button("Load")) {
+            NFD::UniquePath load_path;
+            const nfdfilteritem_t filters[1] = {{"Signalbox Sequence", "sbxsq"}};
+
+            const auto result = NFD::OpenDialog(load_path, filters, 1);
+            if (result == NFD_OKAY) {
+                std::lock_guard lock{m_filters.mut};
+                std::fstream file{load_path.get(), std::ios::in | std::ios::binary};
+
+                const auto num_filters = enc_decode_one<uint32>(file);
+                m_filters.filters.clear();
+                m_filters.filters.reserve(num_filters);
+                m_filter_count = 0;
+                for (size_t i = 0; i < num_filters; ++i) {
+                    const auto name = enc_decode_string(file);
+                    const auto filter = find_filter(name);
+                    if (!filter)
+                        break;
+                    auto f = filter->fn();
+                    f->decode(file);
+                    add_filter(std::move(f), true);
+                }
+
+                file.close();
+            }
+        }
+
+#ifndef NDEBUG
+        s.set_rtl(true);
+        s.set_color(m_config.colors.red);
+        s.write("DEBUG");
+#endif
+    }
+
+    {
         auto s = new_spacef(rect2<float32>{
-            {0.f, 0.f},
+            {0.f, m_config.line_height},
             {static_cast<float32>(m_panel_width) * m_config.char_width + m_config.outer_padding,
              m_layout_rect.size.y + 2.f * m_config.outer_padding}}
                                 .inflate(-m_config.outer_padding));
@@ -338,7 +404,7 @@ void board::draw_frame() {
         const auto capture_muted = m_filter_executor.capture_mute.load();
 
         auto s =
-            make_spacef({m_layout_rect.size.x, m_config.line_height * 4.f + 2.f * m_config.inner_padding});
+            make_spacef({m_layout_rect.size.x, m_config.line_height * 3.f + 2.f * m_config.inner_padding});
         s.begin();
         s.set_bold(true);
         s.write(m_executor_status);
@@ -380,53 +446,6 @@ void board::draw_frame() {
         s.write(" Right OUT ");
         ui_chan_sel(s, capture_l_chan);
         s.write("Left OUT ");
-
-        s.next_line();
-        s.set_rtl(false);
-        s.set_color(m_config.colors.green);
-        if (s.write_button("Save")) {
-            NFD::UniquePath save_path;
-            const nfdfilteritem_t filters[1] = {{"Signalbox Sequence", "sbxsq"}};
-
-            const auto result = NFD::SaveDialog(save_path, filters, 1);
-            if (result == NFD_OKAY) {
-                std::lock_guard lock{m_filters.mut};
-                std::fstream file{save_path.get(), std::ios::out | std::ios::binary};
-                enc_encode_one<uint32>(file, m_filters.filters.size());
-                for (const auto& f : m_filters.filters) {
-                    enc_encode_string(file, f->name());
-                    f->encode(file);
-                }
-                file.close();
-            }
-        }
-        s.write(" ");
-        if (s.write_button("Load")) {
-            NFD::UniquePath load_path;
-            const nfdfilteritem_t filters[1] = {{"Signalbox Sequence", "sbxsq"}};
-
-            const auto result = NFD::OpenDialog(load_path, filters, 1);
-            if (result == NFD_OKAY) {
-                std::lock_guard lock{m_filters.mut};
-                std::fstream file{load_path.get(), std::ios::in | std::ios::binary};
-
-                const auto num_filters = enc_decode_one<uint32>(file);
-                m_filters.filters.clear();
-                m_filters.filters.reserve(num_filters);
-                m_filter_count = 0;
-                for (size_t i = 0; i < num_filters; ++i) {
-                    const auto name = enc_decode_string(file);
-                    const auto filter = find_filter(name);
-                    if (!filter)
-                        break;
-                    auto f = filter->fn();
-                    f->decode(file);
-                    add_filter(std::move(f), true);
-                }
-
-                file.close();
-            }
-        }
 
         s.end();
 

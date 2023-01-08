@@ -30,10 +30,10 @@ void ui_chan_sel(space& space, uint8& chan) {
     space.set_color(space.config().colors.fg);
     const auto s = fmt::format("{:02}", chan);
     if (space.write_hover(s, space.config().colors.hover, space.color())) {
-        const auto scroll = clamp<uint8>(0, 1, static_cast<uint8>(std::abs(space.input().scroll_wheel)));
-        if (space.input().scroll_wheel > 0.f && chan < MAX_CHANNELS)
+        const auto scroll = space.input().take_scroll();
+        if (scroll > 0.f && chan < MAX_CHANNELS)
             chan += scroll;
-        else if (space.input().scroll_wheel < 0.f && chan > 0)
+        else if (scroll < 0.f && chan > 0)
             chan -= scroll;
     }
 
@@ -65,10 +65,10 @@ void ui_enum_sel(space& space, std::span<const std::string> options, bool wrap, 
         if (space.write_hover(
                 options[i] + std::string(max_sz - options[i].size(), '.'), space.config().colors.hover,
                 space.color())) {
-            const auto scroll = static_cast<uint8>(std::abs(space.input().scroll_wheel));
-            if (space.input().scroll_wheel > 0.f && (wrap || i < options.size() - 1))
+            const auto scroll = space.input().take_scroll();
+            if (scroll > 0.f && (wrap || i < options.size() - 1))
                 i += scroll;
-            else if (space.input().scroll_wheel < 0.f && (wrap || i > 0))
+            else if (scroll < 0.f && (wrap || i > 0))
                 i -= scroll;
             i %= options.size();
         }
@@ -95,7 +95,7 @@ void ui_float_ran(space& space, float32 min, float32 max, float32 step, float32&
     const auto prec =
         std::max(static_cast<int32>(fmt::format("{:g}", step - std::floor(step)).size()) - 2, 0);
     if (space.write_hover(fmt::format("[{:+.{}f}]", x, prec), space.config().colors.hover, space.color())) {
-        x = clamp(min, max, x + step * std::round(space.input().scroll_wheel));
+        x = clamp(min, max, x + step * std::round(space.input().take_scroll()));
     }
 
     ui_float_btn(space, x, min, max, step, !rtl);
@@ -121,7 +121,7 @@ void ui_int_ran(space& space, int32 min, int32 max, int32 step, uint8 pad, int32
 
     space.set_color(space.config().colors.fg);
     if (space.write_hover(fmt::format("[{:0{}}]", x, pad), space.config().colors.hover, space.color())) {
-        x = clamp(min, max, x + step * static_cast<int32>(std::lround(space.input().scroll_wheel)));
+        x = clamp(min, max, x + step * static_cast<int32>(std::lround(space.input().take_scroll())));
     }
 
     ui_int_btn(space, x, min, max, step, !rtl);
@@ -133,43 +133,109 @@ void ui_int(space& space, int32 step, uint8 pad, int32& x) {
     ui_int_ran(space, INT32_MIN, INT32_MAX, step, pad, x);
 }
 
-void ui_tracker_note(space& space, tracker_note& note) {
-    auto hover = false;
+void ui_tracker_line(space& space, tracker_line& line, uint8 num_notes, uint8 num_fx) {
+    space.set_rtl(false);
+    for (size_t i = 0; i < num_notes; ++i) {
+        auto& note = line.notes[i];
+        const auto gate = get_note_gate(note);
+        const auto mode = get_note_mode(note);
+        const auto val = get_trkline_value(note);
 
-    switch (note.mode) {
-    case tracker_note_mode::empty: {
-        space.set_color(space.config().colors.semifaint);
-        hover = space.write_hover("...", space.config().colors.hover, space.config().colors.semifaint);
-        break;
-    }
-    case tracker_note_mode::on: {
-        space.set_color(space.config().colors.fg);
-        hover = space.write_hover(
-            fmt::format("{:03}", note.index), space.config().colors.hover, space.config().colors.fg);
-        break;
-    }
-    case tracker_note_mode::off: {
-        space.set_color(space.config().colors.red);
-        hover = space.write_hover("OFF", space.config().colors.hover, space.config().colors.red);
-        break;
-    }
-    default:
-        break;
-    }
+        NVGcolor color;
+        std::string note_str;
+        std::string gate_str;
 
-    if (hover) {
-        if (note.mode == tracker_note_mode::on) {
-            const auto scroll = space.input().scroll_wheel;
-            if (scroll > 0.f && note.index < 255) {
-                ++note.index;
-            } else if (scroll < 0.f && note.index > 0) {
-                --note.index;
+        switch (mode) {
+        case tracker_note_mode::empty: {
+            color = space.config().colors.semifaint;
+            note_str = "...";
+            gate_str = "--";
+            break;
+        }
+        case tracker_note_mode::on: {
+            color = space.config().colors.fg;
+            note_str = midi_str(val);
+            gate_str = fmt::format("{:02}", gate);
+            break;
+        }
+        case tracker_note_mode::off: {
+            color = space.config().colors.red;
+            note_str = "O F";
+            gate_str = " F";
+            break;
+        }
+        default:
+            break;
+        }
+
+        space.set_color(color);
+        if (space.write_hover(note_str, space.config().colors.hover, color)) {
+            if (mode == tracker_note_mode::on) {
+                const auto scroll = space.input().take_scroll();
+                if (scroll > 0.f && val < MAX_NOTE_VALUE) {
+                    set_trkline_value(note, val + 1);
+                } else if (scroll < 0.f && val > 0) {
+                    set_trkline_value(note, val - 1);
+                }
+            }
+
+            if (space.input().mouse_just_pressed[0]) {
+                set_note_mode(note, (tracker_note_mode)(((uint8)mode + 1) % (uint8)tracker_note_mode::_max));
             }
         }
 
-        if (space.input().mouse_just_pressed[0]) {
-            note.mode = (tracker_note_mode)(((uint8)note.mode + 1) % (uint8)tracker_note_mode::_max);
+        if (space.write_hover(gate_str, space.config().colors.hover, color)) {
+            if (mode == tracker_note_mode::on) {
+                const auto scroll = space.input().take_scroll();
+                if (scroll > 0.f && gate < MAX_NOTE_GATE) {
+                    set_note_gate(note, gate + 1);
+                } else if (scroll < 0.f && gate > 0) {
+                    set_note_gate(note, gate - 1);
+                }
+            }
         }
+
+        space.write(" ");
+    }
+
+    space.set_rtl(true);
+    for (size_t i = 0; i < num_fx; ++i) {
+        auto& fx = line.fx[i];
+        const auto mode = get_fx_mode(fx);
+        const auto val = get_trkline_value(fx);
+        auto hover = false;
+        switch (mode) {
+        case tracker_fx_mode::empty: {
+            space.set_color(space.config().colors.semifaint);
+            hover = space.write_hover("...", space.config().colors.hover, space.config().colors.semifaint);
+            break;
+        }
+        default: {
+            static const std::string fx_abbrevs[(size_t)tracker_fx_mode::_max] = {"?", "V", "U", "D"};
+            space.set_color(space.config().colors.fg);
+            hover = space.write_hover(
+                fmt::format("{}{:02X}", fx_abbrevs[(size_t)mode], val), space.config().colors.hover,
+                space.config().colors.fg);
+            break;
+        }
+        }
+
+        if (hover) {
+            if (mode != tracker_fx_mode::empty) {
+                const auto scroll = space.input().take_scroll();
+                if (scroll > 0.f && val < 255) {
+                    set_trkline_value(fx, val + 1);
+                } else if (scroll < 0.f && val > 0) {
+                    set_trkline_value(fx, val - 1);
+                }
+            }
+
+            if (space.input().mouse_just_pressed[0]) {
+                set_fx_mode(fx, (tracker_fx_mode)(((uint8)mode + 1) % (uint8)tracker_fx_mode::_max));
+            }
+        }
+
+        space.write(" ");
     }
 }
 
@@ -508,4 +574,30 @@ void ui_viz_meter(space& space, float32 level) {
     }
     nvgFill(nvg);
     nvgRestore(nvg);
+}
+
+space ui_begin_vscroll(space& space, ui_scroll_state& state) {
+    const auto outer_rect = space.draw_block(state.lines);
+    auto inner_rect = outer_rect;
+    inner_rect.size.y = state.inner_lines * space.config().line_height;
+    inner_rect.pos.y -= state.scroll * space.config().line_height;
+
+    auto sub = space.subspace(inner_rect, outer_rect);
+    sub.begin();
+    return sub;
+}
+
+void ui_end_vscroll(space& space, ui_scroll_state& state) {
+    const auto nvg = space.nvg();
+
+    if (state.scrollable && space.scissor().contains(space.input().cursor_pos)) {
+        const auto scroll = space.input().take_scroll();
+        if (scroll < 0.f && state.scroll < state.inner_lines - state.lines) {
+            ++state.scroll;
+        } else if (scroll > 0.f && state.scroll > 0) {
+            --state.scroll;
+        }
+    }
+
+    space.end();
 }

@@ -6,45 +6,57 @@
 #include <glm/gtc/type_ptr.hpp>
 
 space::space(
-    GLFWwindow* window, NVGcontext* nvg, void*& focus, bool& did_focus, input_state input,
-    board_config config, rect2<float32> rect)
+    GLFWwindow* window, NVGcontext* nvg, void*& focus, bool& did_focus, input_state& input,
+    board_config config, rect2<float32> rect, rect2<float32> scissor, bool subspace)
     : focus{focus}, did_focus{did_focus}, m_window{window}, m_nvg{nvg}, m_input{input}, m_config{config},
-      m_outer_rect{rect} {
-    m_rect = m_outer_rect.inflate(-m_config.inner_padding);
+      m_outer_rect{rect}, m_subspace{subspace}, m_scissor{subspace ? scissor : rect} {
+    m_rect = m_outer_rect.inflate(m_subspace ? 0.f : -m_config.inner_padding);
     m_layout_cursor = m_rect.pos;
     m_available_width = m_rect.size.x;
     m_rtl = false;
     m_bold = false;
+    m_sans = false;
 
     m_color = m_config.colors.fg;
 }
 
 void space::begin() {
-    const auto border_rect = m_outer_rect.half_round();
+    if (!m_subspace) {
+        const auto border_rect = m_outer_rect.half_round();
 
-    nvgSave(m_nvg);
+        nvgSave(m_nvg);
 
-    nvgBeginPath(m_nvg);
-    nvgRoundedRect(m_nvg, NVG_RECT_ARGS(m_outer_rect), 2.f);
-    nvgFillColor(m_nvg, m_config.colors.frame_bg);
-    nvgFill(m_nvg);
+        nvgBeginPath(m_nvg);
+        nvgRoundedRect(m_nvg, NVG_RECT_ARGS(m_outer_rect), 2.f);
+        nvgFillColor(m_nvg, m_config.colors.frame_bg);
+        nvgFill(m_nvg);
 
-    nvgBeginPath(m_nvg);
-    nvgRoundedRect(m_nvg, NVG_RECT_ARGS(border_rect), 2.f);
-    nvgStrokeColor(m_nvg, m_config.colors.frame);
-    nvgStrokeWidth(m_nvg, 1.f);
-    nvgStroke(m_nvg);
+        nvgBeginPath(m_nvg);
+        nvgRoundedRect(m_nvg, NVG_RECT_ARGS(border_rect), 2.f);
+        nvgStrokeColor(m_nvg, m_config.colors.frame);
+        nvgStrokeWidth(m_nvg, 1.f);
+        nvgStroke(m_nvg);
 
-    nvgRestore(m_nvg);
+        nvgRestore(m_nvg);
 
-    nvgSave(m_nvg);
-    nvgIntersectScissor(m_nvg, NVG_RECT_ARGS(m_outer_rect));
-    nvgSave(m_nvg);
+        nvgSave(m_nvg);
+        nvgIntersectScissor(m_nvg, NVG_RECT_ARGS(m_outer_rect));
+        nvgSave(m_nvg);
+    } else {
+        nvgSave(m_nvg);
+        nvgIntersectScissor(m_nvg, NVG_RECT_ARGS(m_outer_rect));
+        nvgIntersectScissor(m_nvg, NVG_RECT_ARGS(m_scissor));
+        nvgSave(m_nvg);
+    }
 }
 
 void space::end() {
     nvgRestore(m_nvg);
     nvgRestore(m_nvg);
+}
+
+space space::subspace(const rect2<float32>& rect, const rect2<float32>& scissor) {
+    return space{m_window, m_nvg, focus, did_focus, m_input, m_config, rect, scissor, true};
 }
 
 rect2<float32> space::measure(const std::string& s) {
@@ -109,7 +121,8 @@ bool space::write_hover(const std::string& s, NVGcolor bg, NVGcolor fg) {
     auto bounds_rect = rect2<float32>{{bounds[0], bounds[1]}, {advance, m_config.line_height}};
     bounds_rect = bounds_rect.translate({x, y});
 
-    const auto mouse_over = bounds_rect.contains(m_input.cursor_pos);
+    const auto mouse_over =
+        bounds_rect.contains(m_input.cursor_pos) && scissor().contains(m_input.cursor_pos);
 
     if (mouse_over) {
         nvgBeginPath(m_nvg);
@@ -161,7 +174,7 @@ NVGcontext* space::nvg() const {
     return m_nvg;
 }
 
-const input_state& space::input() const {
+input_state& space::input() {
     return m_input;
 }
 
@@ -171,6 +184,14 @@ const board_config& space::config() const {
 
 rect2<float32> space::rect() const {
     return m_rect;
+}
+
+rect2<float32> space::scissor() const {
+    return m_scissor;
+}
+
+vector2<float32> space::layout_cursor() const {
+    return m_layout_cursor;
 }
 
 void space::set_rtl(bool rtl) {
@@ -196,6 +217,10 @@ void space::set_bold(bool bold) {
     m_bold = bold;
 }
 
+void space::set_sans(bool sans) {
+    m_sans = sans;
+}
+
 float32 space::advance_layout_x(float32 x) {
     const auto out_x = m_layout_cursor.x;
     m_available_width -= x;
@@ -204,5 +229,5 @@ float32 space::advance_layout_x(float32 x) {
 }
 
 const char* space::font_face() const {
-    return m_bold ? "monoB" : "mono";
+    return m_sans ? (m_bold ? "sansB" : "sans") : (m_bold ? "monoB" : "mono");
 }

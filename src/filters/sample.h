@@ -15,7 +15,7 @@ struct channel final {
     uint32 sample_rate;
 };
 
-enum class byte_mode { raw, tracker, clock };
+enum class byte_mode { raw, tracker };
 
 struct byte_channel final {
     simd_vec<uint8> bytes;
