@@ -1,7 +1,6 @@
 #pragma once
 
 #include "util.h"
-#include "filter.h"
 
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
@@ -10,88 +9,107 @@
 #include <optional>
 #include <unordered_map>
 
-struct board_colors final {
-    NVGcolor bg;
-    NVGcolor fg;
-    NVGcolor frame;
-    NVGcolor frame_bg;
-    NVGcolor semifaint;
-    NVGcolor faint;
-    NVGcolor hover;
-    NVGcolor editable;
-    NVGcolor focus_frame;
-    NVGcolor red;
-    NVGcolor green;
-    NVGcolor blue;
-    NVGcolor yellow;
-    NVGcolor meter_lo;
-    NVGcolor meter_md;
-    NVGcolor meter_hi;
-    NVGcolor media_control;
-    std::unordered_map<filter_kind, NVGcolor> filters;
+struct ui_options final {
+    float32 font_size;
 
-    static board_colors dark() {
-        return board_colors{
-            .bg = nvgRGB(0, 0, 0),
-            .fg = nvgRGB(255, 255, 255),
-            .frame = nvgRGB(50, 50, 50),
-            .frame_bg = nvgRGB(10, 10, 10),
-            .semifaint = nvgRGB(120, 120, 120),
-            .faint = nvgRGB(50, 50, 50),
-            .hover = nvgRGB(100, 100, 100),
-            .editable = nvgRGB(0, 0, 0),
-            .focus_frame = nvgRGB(255, 208, 0),
-            .red = nvgRGB(247, 47, 80),
-            .green = nvgRGB(107, 255, 127),
-            .blue = nvgRGB(76, 89, 252),
-            .yellow = nvgRGB(252, 232, 3),
-            .meter_lo = nvgRGB(3, 252, 7),
-            .meter_md = nvgRGB(246, 255, 0),
-            .meter_hi = nvgRGB(255, 51, 0),
-            .media_control = nvgRGB(139, 232, 223),
-            .filters =
-                {
-                    {filter_kind::chn, nvgRGB(73, 148, 166)},
-                    {filter_kind::gen, nvgRGB(106, 171, 89)},
-                    {filter_kind::viz, nvgRGB(74, 181, 124)},
-                    {filter_kind::fir, nvgRGB(135, 76, 194)},
-                    {filter_kind::iir, nvgRGB(194, 76, 151)},
-                    {filter_kind::trk, nvgRGB(157, 255, 0)},
-                    {filter_kind::misc, nvgRGB(156, 135, 141)},
-                },
+    static ui_options default_options() {
+        return ui_options{
+            .font_size = 12.f,
         };
     }
 };
 
-struct board_config final {
-    board_colors colors = board_colors::dark();
+struct ui_colors final {
+    NVGcolor bg;
+    NVGcolor fg;
 
-    float32 font_size;
-    float32 line_height;
-    float32 char_width;
-    float32 ascender;
+    NVGcolor button_from;
+    NVGcolor button_to;
+    NVGcolor button_border;
 
-    float32 outer_padding;
-    float32 inner_padding;
+    static ui_colors dark() {
+        return ui_colors{
+            .bg = nvgRGB(30, 30, 30),
+            .fg = nvgRGB(212, 212, 212),
+
+            .button_from = nvgRGB(110, 110, 110),
+            .button_to = nvgRGB(60, 60, 60),
+            .button_border = nvgRGB(0, 0, 0),
+        };
+    }
 };
 
 struct input_state final {
     std::array<bool, GLFW_KEY_LAST> keys_just_pressed;
-    vector2<float32> cursor_pos = {0.f, 0.f};
-    std::array<bool, GLFW_MOUSE_BUTTON_LAST> mouse_just_pressed =
-        fill_array<bool, GLFW_MOUSE_BUTTON_LAST>(false);
-    std::array<bool, GLFW_MOUSE_BUTTON_LAST> mouse_just_released =
-        fill_array<bool, GLFW_MOUSE_BUTTON_LAST>(false);
+    std::optional<char32> text;
+
+    vector2<float32> cursor_pos;
     float32 scroll_wheel = 0.f;
-    std::optional<char32> text = {};
+    bool hover_taken = false;
+    std::array<bool, GLFW_MOUSE_BUTTON_LAST> mouse_just_pressed;
+    std::array<bool, GLFW_MOUSE_BUTTON_LAST> mouse_just_released;
+    std::array<bool, GLFW_MOUSE_BUTTON_LAST> mouse_is_pressed;
+    
+    std::vector<rect2f32> prev_overlays;
+    std::vector<rect2f32> next_overlays;
+    bool hover_overlay = false;
+    bool was_hover_overlay = false;
 
     input_state() {
+        end_frame();
+    }
+
+    void begin_frame() {
+        prev_overlays = next_overlays;
+        next_overlays.clear();
+
+        hover_overlay = false;
+        for (const auto& overlay : prev_overlays) {
+            if (overlay.contains(cursor_pos)) {
+                hover_overlay = true;
+                break;
+            }
+        }
+    }
+
+    void end_frame() {
         keys_just_pressed.fill(false);
+        text.reset();
+
+        scroll_wheel = 0.f;
+        mouse_just_pressed.fill(false);
+        mouse_just_released.fill(false);
+
+        hover_taken = false;
     }
 
     float32 take_scroll() {
         const auto f = scroll_wheel;
         scroll_wheel = 0.f;
         return f;
+    }
+
+    bool take_hover(const rect2f32& rect) {
+        if (!hover_overlay && !hover_taken && rect.contains(cursor_pos)) {
+            hover_taken = true;
+            return true;
+        }
+        return false;
+    }
+    
+    void push_overlay(const rect2f32& rect) {
+        next_overlays.push_back(rect);
+    }
+
+    void begin_overlay_hover(const rect2f32& rect) {
+        if (hover_overlay && rect.contains(cursor_pos)) {
+            was_hover_overlay = true;
+            hover_overlay = false;
+        }
+    }
+
+    void end_overlay_hover() {
+        hover_overlay = was_hover_overlay;
+        was_hover_overlay = false;
     }
 };

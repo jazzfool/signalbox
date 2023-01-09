@@ -12,6 +12,8 @@
 #include <cctype>
 #include <type_traits>
 #include <utility>
+#include <glm/common.hpp>
+#include <robin_hood.h>
 
 #define sb_ASSERT(x) assert((x))
 #define sb_ASSERT_EQ(x, y) assert(((x) == (y)))
@@ -42,6 +44,14 @@ template <typename T>
 struct rect2 {
     vector2<T> pos, size;
 
+    static rect2 from_min_max(vector2<T> min, vector2<T> max) {
+        return {min, max - min};
+    }
+
+    vector2<T> min() const {
+        return pos;
+    }
+
     vector2<T> max() const {
         return {pos.x + size.x, pos.y + size.y};
     }
@@ -71,7 +81,14 @@ struct rect2 {
             {std::round(pos.x) + static_cast<T>(0.5), std::round(pos.y) + static_cast<T>(0.5)},
             {std::round(size.x), std::round(size.y)}};
     }
+
+    rect2 rect_union(const rect2& r) {
+        return {glm::min(min(), r.min()), std::max(max(), r.max())};
+    }
 };
+
+using rect2f32 = rect2<float32>;
+using vector2f32 = vector2<float32>;
 
 template <typename T, typename = std::enable_if_t<std::is_floating_point_v<T>>>
 inline bool float_eq(T a, T b) {
@@ -128,4 +145,13 @@ inline uint32 rdbytesu32le(const uint8* p) {
 inline uint64 rdbytesu64le(const uint8* p) {
     return (uint64)p[7] << 56 | (uint64)p[6] << 48 | (uint64)p[5] << 40 | (uint64)p[4] << 32 |
            (uint64)p[3] << 24 | (uint64)p[2] << 16 | (uint64)p[1] << 8 | (uint64)p[0];
+}
+
+inline void hash_combine(std::size_t& seed) {
+}
+
+template <typename T, typename... Rest>
+void hash_combine(std::size_t& seed, const T& v, const Rest&... rest) {
+    seed ^= robin_hood::hash<T>{}(v) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+    (hash_combine(seed, rest), ...);
 }

@@ -6,24 +6,13 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 project(Signalbox C CXX)
 
 set(Source
-    src/board.cpp
+    src/tracker.cpp
     src/impl.cpp
     src/main.cpp
-    src/space.cpp
-    src/widget.cpp
+    src/ui.cpp
     src/context_gl.c
     src/enc.cpp
     src/draw.cpp
-
-    src/filters/chn.cpp
-    src/filters/executor.cpp
-    src/filters/fir.cpp
-    src/filters/gen.cpp
-    src/filters/sbfft.cpp
-    src/filters/sse.c
-    src/filters/tfm.cpp
-    src/filters/viz.cpp
-    src/filters/trk.cpp
 )
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native")
@@ -41,7 +30,7 @@ add_executable(Signalbox ${Source})
 
 add_subdirectory(ext)
 
-target_link_libraries(Signalbox PRIVATE glfw nanovg spdlog::spdlog libglew_static glm miniaudio SPSCQueue RingBuffer muFFT sse_mathfun sse2neon nfd)
+target_link_libraries(Signalbox PRIVATE glfw nanovg spdlog::spdlog libglew_static glm miniaudio SPSCQueue RingBuffer muFFT sse_mathfun sse2neon nfd robin_hood)
 if (${SB_USE_METAL})
     target_link_libraries(Signalbox PRIVATE MetalNanoVG)
     target_compile_definitions(Signalbox PRIVATE SB_USE_METAL)

@@ -1,8 +1,0 @@
-#pragma once
-
-#include "filter.h"
-
-#include <memory>
-
-std::unique_ptr<filter_base> fltr_gen_sine();
-std::unique_ptr<filter_base> fltr_gen_file();

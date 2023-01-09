@@ -1,6 +1,7 @@
 include(FetchContent)
 
-set(GLFW_STANDALONE ON)
+set(GLFW_STANDALONE OFF)
+set(RH_STANDALONE_PROJECT OFF)
 
 FetchContent_Declare(
     glfw
@@ -82,6 +83,12 @@ FetchContent_Declare(
     GIT_TAG 6efc824070c79afd42a3a9e08da8f867d0ca2a97 # v1.0.1
 )
 
+FetchContent_Declare(
+    robin-hood
+    GIT_REPOSITORY https://github.com/martinus/robin-hood-hashing.git
+    GIT_TAG 9145f963d80d6a02f0f96a47758050a89184a3ed # v3.11.5
+)
+
 if(${SB_USE_METAL})
     FetchContent_Declare(
         MetalNanoVG
@@ -90,7 +97,7 @@ if(${SB_USE_METAL})
     )
 endif()
 
-FetchContent_MakeAvailable(glfw nanovg spdlog glew glm freetype miniaudio SPSCQueue RingBuffer muFFT sse_mathfun sse2neon nfd)
+FetchContent_MakeAvailable(glfw nanovg spdlog glew glm freetype miniaudio SPSCQueue RingBuffer muFFT sse_mathfun sse2neon nfd robin-hood)
 
 add_library(nanovg)
 target_sources(nanovg PRIVATE ${CMAKE_BINARY_DIR}/_deps/nanovg-src/src/nanovg.c)
