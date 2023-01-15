@@ -71,11 +71,11 @@ struct ui_memory final {
         m_next_ikey = 0;
     }
 
-    template <typename T>
-    T& state(ui_key key) {
+    template <typename T, typename OrInsert>
+    T& state(ui_key key, OrInsert&& or_insert) {
         static_assert(std::is_default_constructible_v<T>);
         if (!m_state.contains(key.value())) {
-            m_state.emplace(key.value(), T{});
+            m_state.emplace(key.value(), or_insert());
         }
         return std::any_cast<T&>(m_state.at(key.value()));
     }
@@ -169,8 +169,13 @@ ui_key_guard::ui_key_guard(ui_state& state, Args&&... arg) : m_state{&state}, m_
 }
 
 template <typename T>
-T& ui_get_state(ui_key key) {
-    return ui_state::get().memory->state<T>(key);
+T ui_default_or_insert() {
+    return T{};
+}
+
+template <typename T, typename OrInsert = decltype(ui_default_or_insert<T>)>
+T& ui_get_state(ui_key key, OrInsert&& or_insert = ui_default_or_insert<T>) {
+    return ui_state::get().memory->state<T, OrInsert>(key, std::forward<OrInsert>(or_insert));
 }
 
 struct ui_layout {

@@ -242,10 +242,17 @@ void ui_dropdown_box(const ui_dropdown_box_opts& opts) {
 
     ui_exact popup_layout;
 
+    float32 max_width = 0.f;
+    for (const auto& option : opts.options) {
+        const auto width =
+            ui_text_opts::with_text("⯆").measure().x + ui_text_opts::with_text(option).measure().x + 10.f;
+        max_width = std::max(max_width, width);
+    }
+
     const auto clicked = ui_button(
         {}, //
         ui_lambda([&] {
-            ui_fixed fixed{{popup_layout.min_size().x + 5.f, 0.f}};
+            ui_fixed fixed{{max_width, 0.f}};
             ui_with_layout(fixed, [&] {
                 ui_row2 row;
                 ui_with_layout(row, [&] {

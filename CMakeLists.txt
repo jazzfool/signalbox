@@ -18,7 +18,11 @@ set(Source
 FILE(GLOB_RECURSE Headers "src/*.h")
 add_custom_target(headers SOURCES ${Headers})
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native -fno-exceptions /EHsc")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native -fexceptions")
+
+if (${MSVC})
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /EHsc")
+endif()
 
 if (${APPLE})
     set(SB_USE_METAL ON)
