@@ -11,17 +11,32 @@
 
 struct ui_options final {
     float32 font_size;
+    float32 corner_radius;
+    float32 border_width;
+    float32 text_pad_x;
+    float32 text_pad_y;
 
     static ui_options default_options() {
         return ui_options{
-            .font_size = 12.f,
+            .font_size = 10.f,
+            .corner_radius = 2.f,
+            .border_width = 1.f,
+            .text_pad_x = 6.f,
+            .text_pad_y = 3.f,
         };
     }
 };
 
 struct ui_colors final {
+    NVGcolor window_bg;
     NVGcolor bg;
     NVGcolor fg;
+    NVGcolor border;
+
+    NVGcolor highlight_bg;
+    NVGcolor highlight_fg;
+    NVGcolor lowlight_bg;
+    NVGcolor lowlight_fg;
 
     NVGcolor button_from;
     NVGcolor button_to;
@@ -29,11 +44,18 @@ struct ui_colors final {
 
     static ui_colors dark() {
         return ui_colors{
-            .bg = nvgRGB(30, 30, 30),
+            .window_bg = nvgRGB(40, 40, 40),
+            .bg = nvgRGB(60, 60, 60),
             .fg = nvgRGB(212, 212, 212),
+            .border = nvgRGB(0, 0, 0),
 
-            .button_from = nvgRGB(110, 110, 110),
-            .button_to = nvgRGB(60, 60, 60),
+            .highlight_bg = nvgRGB(171, 14, 66),
+            .highlight_fg = nvgRGB(255, 255, 255),
+            .lowlight_bg = nvgRGB(45, 45, 45),
+            .lowlight_fg = nvgRGB(230, 230, 230),
+
+            .button_from = nvgRGB(40, 40, 40),
+            .button_to = nvgRGB(20, 20, 20),
             .button_border = nvgRGB(0, 0, 0),
         };
     }
@@ -49,7 +71,7 @@ struct input_state final {
     std::array<bool, GLFW_MOUSE_BUTTON_LAST> mouse_just_pressed;
     std::array<bool, GLFW_MOUSE_BUTTON_LAST> mouse_just_released;
     std::array<bool, GLFW_MOUSE_BUTTON_LAST> mouse_is_pressed;
-    
+
     std::vector<rect2f32> prev_overlays;
     std::vector<rect2f32> next_overlays;
     bool hover_overlay = false;
@@ -96,7 +118,7 @@ struct input_state final {
         }
         return false;
     }
-    
+
     void push_overlay(const rect2f32& rect) {
         next_overlays.push_back(rect);
     }

@@ -8,6 +8,8 @@
 
 enum class draw_font { mono, mono_bold, sans, sans_bold, _max };
 
+enum class text_align { center_middle, left_middle };
+
 struct draw_list final {
   public:
     static constexpr size_t MAX_LAYERS = 8;
@@ -25,7 +27,10 @@ struct draw_list final {
     void tb_grad_fill_rrect(const rect2f32& rect, float32 radius, NVGcolor from, NVGcolor to);
 
     vector2f32 measure_text(std::string_view text, draw_font font, float32 size) const;
-    void centered_text(vector2f32 pos, std::string_view text, NVGcolor color, draw_font font, float32 size);
+    float32 line_height(draw_font font, float32 size) const;
+    void text(
+        vector2f32 pos, text_align align, std::string_view text, NVGcolor color, draw_font font,
+        float32 size);
 
   private:
     struct cmd_paint final {
@@ -49,7 +54,7 @@ struct draw_list final {
 
     struct cmd_text final {
         vector2f32 pos;
-        int32 align = NVG_ALIGN_BASELINE | NVG_ALIGN_LEFT;
+        text_align align = text_align::center_middle;
         NVGcolor color = nvgRGB(0, 0, 0);
         std::string text;
         draw_font font = draw_font::sans;

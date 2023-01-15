@@ -35,4 +35,6 @@
 .vs
 CMakeSettings.json
 .DS_Store
-/build
+/*build*
+.idea/
+CMakeLists.txt.user

@@ -7,6 +7,17 @@ const char* get_font_name(draw_font font) {
     return font_names[(size_t)font];
 }
 
+int32 get_text_align(text_align align) {
+    switch (align) {
+    case text_align::center_middle:
+        return NVG_ALIGN_CENTER | NVG_ALIGN_BASELINE;
+    case text_align::left_middle:
+        return NVG_ALIGN_LEFT | NVG_ALIGN_BASELINE;
+    default:
+        return 0;
+    }
+}
+
 NVGcolor blend_color(NVGcolor a, NVGcolor b, float32 t) {
     return nvgRGBAf(lerp(a.r, b.r, t), lerp(a.g, b.g, t), lerp(a.b, b.b, t), lerp(a.a, b.a, t));
 }
@@ -33,8 +44,10 @@ void draw_list::execute() {
                 nvgFontFace(m_nvg, get_font_name(cmdtext.font));
                 nvgFontSize(m_nvg, cmdtext.size);
                 nvgFillColor(m_nvg, cmdtext.color);
-                nvgTextAlign(m_nvg, cmdtext.align);
-                nvgText(m_nvg, cmdtext.pos.x, cmdtext.pos.y, cmdtext.text.c_str(), nullptr);
+                nvgTextAlign(m_nvg, get_text_align(cmdtext.align));
+                float32 ascender = 0.f;
+                nvgTextMetrics(m_nvg, &ascender, nullptr, nullptr);
+                nvgText(m_nvg, cmdtext.pos.x, cmdtext.pos.y + ascender / 2.f, cmdtext.text.c_str(), nullptr);
 
                 break;
             }
@@ -108,11 +121,21 @@ vector2f32 draw_list::measure_text(std::string_view text, draw_font font, float3
     return {bounds[2] - bounds[0], bounds[3] - bounds[1]};
 }
 
-void draw_list::centered_text(
-    vector2f32 pos, std::string_view text, NVGcolor color, draw_font font, float32 size) {
+float32 draw_list::line_height(draw_font font, float32 size) const {
+    nvgFontFace(m_nvg, get_font_name(font));
+    nvgFontSize(m_nvg, size);
+
+    float32 lh = 0.f;
+    nvgTextMetrics(m_nvg, nullptr, nullptr, &lh);
+
+    return lh;
+}
+
+void draw_list::text(
+    vector2f32 pos, text_align align, std::string_view text, NVGcolor color, draw_font font, float32 size) {
     cmd_text cmdtext;
     cmdtext.pos = pos;
-    cmdtext.align = NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE;
+    cmdtext.align = align;
     cmdtext.color = color;
     cmdtext.text = text;
     cmdtext.font = font;

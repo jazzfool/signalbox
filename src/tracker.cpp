@@ -9,7 +9,6 @@
 #endif
 
 tracker::tracker() : m_focus{ui_key::null()} {
-    m_focus_taken = false;
     m_dpi_scale = 1.f;
     m_ui_opts = ui_options::default_options();
     m_ui_colors = ui_colors::dark();
@@ -76,10 +75,18 @@ tracker& tracker::create() {
     nvgCreateFont(m_cx.nvg, "mono", "data/iosevka-fixed-slab-extended.ttf");
     nvgCreateFont(m_cx.nvg, "monoB", "data/iosevka-fixed-slab-extendedbold.ttf");
 
-    nvgCreateFont(m_cx.nvg, "sans", "data/DejaVuSans.ttf");
-    nvgCreateFont(m_cx.nvg, "sansB", "data/DejaVuSans-Bold.ttf");
-    nvgCreateFont(m_cx.nvg, "sansI", "data/DejaVuSans-Oblique.ttf");
-    nvgCreateFont(m_cx.nvg, "sansBI", "data/DejaVuSans-BoldOblique.ttf");
+    nvgCreateFont(m_cx.nvg, "sans", "data/NotoSans-Regular.ttf");
+    nvgCreateFont(m_cx.nvg, "sansB", "data/NotoSans-Bold.ttf");
+    nvgCreateFont(m_cx.nvg, "sansI", "data/NotoSans-Italic.ttf");
+    nvgCreateFont(m_cx.nvg, "sansBI", "data/NotoSans-BoldItalic.ttf");
+
+    nvgCreateFont(m_cx.nvg, "symbols", "data/NotoSansSymbols-Regular.ttf");
+    nvgCreateFont(m_cx.nvg, "symbols2", "data/NotoSansSymbols2-Regular.ttf");
+    nvgCreateFont(m_cx.nvg, "emoji", "data/NotoEmoji-Regular.ttf");
+
+    nvgAddFallbackFont(m_cx.nvg, "sans", "symbols");
+    nvgAddFallbackFont(m_cx.nvg, "sans", "symbols2");
+    nvgAddFallbackFont(m_cx.nvg, "sans", "emoji");
 
     return *this;
 }
@@ -97,21 +104,21 @@ tracker& tracker::run_loop() {
     return *this;
 }
 
-void tracker::view(ui_state& state, ui_layout& layout) {
-    ui_button btn{state};
-    btn.text = "Click me!";
-    btn.view(state, layout);
+void tracker::ui() {
+    ui_vstack vs;
+    vs.spacing = 5.f;
+    ui_with_layout(vs, [&] {
+        ui_text_button({}, "Hello, world!");
 
-    static uint32 opt = 0;
+        static uint32 opt = 0;
 
-    ui_dropdown_box dropdown;
-    dropdown.index = &opt;
-    dropdown.options = {"Option A", "Option B", "Option C"};
-    dropdown.view(state, layout);
+        static const std::vector<std::string> options = {"Really really Long option", "Short Option", "Bruh"};
 
-    ui_button btn2{state};
-    btn2.text = "Bruh";
-    btn2.view(state, layout);
+        ui_dropdown_box_opts dropdown;
+        dropdown.index = &opt;
+        dropdown.options = options;
+        ui_dropdown_box(dropdown);
+    });
 }
 
 void tracker::draw_frame() {
@@ -121,33 +128,36 @@ void tracker::draw_frame() {
     int32 fb_width, fb_height;
     glfwGetFramebufferSize(m_cx.window, &fb_width, &fb_height);
 
-    const auto clear_color = m_ui_colors.bg;
+    const auto clear_color = m_ui_colors.window_bg;
     context_begin_frame(&m_cx, clear_color.r, clear_color.g, clear_color.b);
 
     nvgBeginFrame(m_cx.nvg, width, height, m_dpi_scale);
     nvgScale(m_cx.nvg, SB_DPI_SCALE(m_dpi_scale), SB_DPI_SCALE(m_dpi_scale));
 
     m_input.begin_frame();
+    m_memory.begin_frame();
 
     draw_list draw{m_cx.nvg};
 
-    ui_state uistate;
-    uistate.draw = &draw;
-    uistate.input = &m_input;
-    uistate.memory = &m_memory;
-    uistate.focus = &m_focus;
-    uistate.focus_taken = &m_focus_taken;
-    uistate.opts = &m_ui_opts;
-    uistate.colors = &m_ui_colors;
+    auto& state = ui_state::get();
+    state.draw = &draw;
+    state.input = &m_input;
+    state.memory = &m_memory;
+    state.focus = &m_focus;
+    state.opts = &m_ui_opts;
+    state.colors = &m_ui_colors;
+    state.focus_taken = false;
 
-    m_focus_taken = false;
+    ui_padding padding;
+    padding.rect = {{0.f, 0.f}, {(float32)width, (float32)height}};
+    padding.left = 10.f;
+    padding.right = 10.f;
+    padding.top = 10.f;
+    padding.bottom = 10.f;
 
-    ui_vstack vs{uistate};
-    vs.rect = {{0.f, 0.f}, {(float32)width, (float32)height}};
-    vs.spacing = 5.f;
-    view(uistate, vs);
+    ui_with_no_alloc_layout(padding, [&] { ui(); });
 
-    if (!m_focus_taken && m_input.mouse_just_pressed[0]) {
+    if (!ui_state::get().focus_taken && m_input.mouse_just_pressed[0]) {
         m_focus = ui_key::null();
     }
 

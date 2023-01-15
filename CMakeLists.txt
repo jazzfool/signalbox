@@ -6,25 +6,28 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 project(Signalbox C CXX)
 
 set(Source
-    src/tracker.cpp
-    src/impl.cpp
-    src/main.cpp
-    src/ui.cpp
-    src/context_gl.c
-    src/enc.cpp
-    src/draw.cpp
+        src/tracker.cpp
+        src/impl.cpp
+        src/main.cpp
+        src/ui.cpp
+        src/context_gl.c
+        src/enc.cpp
+        src/draw.cpp
 )
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native")
+FILE(GLOB_RECURSE Headers "src/*.h")
+add_custom_target(headers SOURCES ${Headers})
+
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native -fno-exceptions /EHsc")
 
 if (${APPLE})
     set(SB_USE_METAL ON)
-endif()
+endif ()
 
 if (${SB_USE_METAL})
     enable_language(OBJC)
     set(Source ${Source} src/context_mtl.m)
-endif()
+endif ()
 
 add_executable(Signalbox ${Source})
 
@@ -34,7 +37,7 @@ target_link_libraries(Signalbox PRIVATE glfw nanovg spdlog::spdlog libglew_stati
 if (${SB_USE_METAL})
     target_link_libraries(Signalbox PRIVATE MetalNanoVG)
     target_compile_definitions(Signalbox PRIVATE SB_USE_METAL)
-endif()
+endif ()
 
 target_include_directories(Signalbox PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_compile_definitions(Signalbox PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)

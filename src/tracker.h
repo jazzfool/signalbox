@@ -7,7 +7,7 @@
 
 struct GLFWwindow;
 
-class tracker final : ui_view<> {
+class tracker final {
   public:
     tracker();
     tracker& create();
@@ -15,9 +15,8 @@ class tracker final : ui_view<> {
 
     tracker& run_loop();
 
-    void view(ui_state& state, ui_layout& layout) override;
-
   private:
+    void ui();
     void draw_frame();
 
     context m_cx;
@@ -25,7 +24,6 @@ class tracker final : ui_view<> {
     input_state m_input;
     ui_memory m_memory;
     ui_key m_focus;
-    bool m_focus_taken;
     ui_options m_ui_opts;
     ui_colors m_ui_colors;
 };
