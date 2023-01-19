@@ -13,16 +13,16 @@ struct ui_options final {
     float32 font_size;
     float32 corner_radius;
     float32 border_width;
-    float32 text_pad_x;
-    float32 text_pad_y;
+    vector2f32 text_pad;
+    float32 panel_pad;
 
     static ui_options default_options() {
         return ui_options{
             .font_size = 10.f,
             .corner_radius = 2.f,
             .border_width = 1.f,
-            .text_pad_x = 6.f,
-            .text_pad_y = 3.f,
+            .text_pad = {6.f, 3.f},
+            .panel_pad = 5.f,
         };
     }
 };
@@ -42,6 +42,12 @@ struct ui_colors final {
     NVGcolor button_to;
     NVGcolor button_border;
 
+    NVGcolor dial_fill_from;
+    NVGcolor dial_fill_to;
+    NVGcolor dial_border_from;
+    NVGcolor dial_border_to;
+    NVGcolor dial_tick;
+
     static ui_colors dark() {
         return ui_colors{
             .window_bg = nvgRGB(40, 40, 40),
@@ -57,15 +63,23 @@ struct ui_colors final {
             .button_from = nvgRGB(40, 40, 40),
             .button_to = nvgRGB(20, 20, 20),
             .button_border = nvgRGB(0, 0, 0),
+
+            .dial_fill_from = nvgRGB(50, 50, 50),
+            .dial_fill_to = nvgRGB(20, 20, 20),
+            .dial_border_from = nvgRGB(120, 120, 120),
+            .dial_border_to = nvgRGB(50, 50, 50),
+            .dial_tick = nvgRGB(120, 120, 120),
         };
     }
 };
 
 struct input_state final {
+    std::array<bool, GLFW_KEY_LAST> key_is_pressed;
     std::array<bool, GLFW_KEY_LAST> keys_just_pressed;
     std::optional<char32> text;
 
-    vector2<float32> cursor_pos;
+    vector2f32 cursor_pos;
+    vector2f32 cursor_delta;
     float32 scroll_wheel = 0.f;
     bool hover_taken = false;
     std::array<bool, GLFW_MOUSE_BUTTON_LAST> mouse_just_pressed;
@@ -78,6 +92,9 @@ struct input_state final {
     bool was_hover_overlay = false;
 
     input_state() {
+        key_is_pressed.fill(false);
+        mouse_is_pressed.fill(false);
+
         end_frame();
     }
 
@@ -98,6 +115,7 @@ struct input_state final {
         keys_just_pressed.fill(false);
         text.reset();
 
+        cursor_delta = {};
         scroll_wheel = 0.f;
         mouse_just_pressed.fill(false);
         mouse_just_released.fill(false);

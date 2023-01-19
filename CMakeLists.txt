@@ -6,44 +6,63 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 project(Signalbox C CXX)
 
 set(Source
-        src/tracker.cpp
-        src/impl.cpp
-        src/main.cpp
-        src/ui.cpp
-        src/context_gl.c
-        src/enc.cpp
-        src/draw.cpp
+    src/app.cpp
+    src/impl.cpp
+    src/main.cpp
+    src/ui.cpp
+    src/context_gl.c
+    src/enc.cpp
+    src/draw.cpp
+    src/tracker/tracker.cpp
 )
 
-FILE(GLOB_RECURSE Headers "src/*.h")
+file(GLOB_RECURSE Headers "src/*.h")
 add_custom_target(headers SOURCES ${Headers})
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native -fexceptions")
 
-if (${MSVC})
+if(${MSVC})
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /EHsc")
 endif()
 
-if (${APPLE})
+if(${APPLE})
     set(SB_USE_METAL ON)
-endif ()
+endif()
 
-if (${SB_USE_METAL})
+if(${SB_USE_METAL})
     enable_language(OBJC)
     set(Source ${Source} src/context_mtl.m)
-endif ()
+endif()
 
 add_executable(Signalbox ${Source})
 
 add_subdirectory(ext)
 
-target_link_libraries(Signalbox PRIVATE glfw nanovg spdlog::spdlog libglew_static glm miniaudio SPSCQueue RingBuffer muFFT sse_mathfun sse2neon nfd robin_hood)
-if (${SB_USE_METAL})
+target_link_libraries(
+  Signalbox
+  PRIVATE glfw
+          nanovg
+          spdlog::spdlog
+          libglew_static
+          glm
+          miniaudio
+          SPSCQueue
+          RingBuffer
+          muFFT
+          sse_mathfun
+          sse2neon
+          nfd
+          robin_hood
+)
+
+if(${SB_USE_METAL})
     target_link_libraries(Signalbox PRIVATE MetalNanoVG)
     target_compile_definitions(Signalbox PRIVATE SB_USE_METAL)
-endif ()
+endif()
 
 target_include_directories(Signalbox PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
-target_compile_definitions(Signalbox PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
+target_compile_definitions(Signalbox PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN
+                                             GLM_FORCE_CTOR_INIT)
 
-file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/data DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
+file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/data
+     DESTINATION ${CMAKE_CURRENT_BINARY_DIR})

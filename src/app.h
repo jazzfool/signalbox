@@ -4,16 +4,17 @@
 #include "util.h"
 #include "state.h"
 #include "ui.h"
+#include "tracker/tracker.h"
 
 struct GLFWwindow;
 
-class tracker final {
+class app final {
   public:
-    tracker();
-    tracker& create();
+    app();
+    app& create();
     void destroy();
 
-    tracker& run_loop();
+    app& run_loop();
 
   private:
     void ui();
@@ -26,4 +27,6 @@ class tracker final {
     ui_key m_focus;
     ui_options m_ui_opts;
     ui_colors m_ui_colors;
+
+    tracker m_tracker;
 };

@@ -13,8 +13,7 @@ FetchContent_Declare(
     nanovg
     GIT_REPOSITORY https://github.com/memononen/nanovg.git
     GIT_TAG 7544c114e83db7cf67bd1c9e012349b70caacc2f # latest
-    CONFIGURE_COMMAND ""
-    BUILD_COMMAND ""
+    CONFIGURE_COMMAND "" BUILD_COMMAND ""
 )
 
 FetchContent_Declare(
@@ -91,37 +90,63 @@ FetchContent_Declare(
 
 if(${SB_USE_METAL})
     FetchContent_Declare(
-        MetalNanoVG
-        GIT_REPOSITORY https://github.com/ollix/MetalNanoVG.git
-        GIT_TAG 58670cd64715e99b00c2fbddb6ace2264873ce91 # latest
+      MetalNanoVG
+      GIT_REPOSITORY https://github.com/ollix/MetalNanoVG.git
+      GIT_TAG 58670cd64715e99b00c2fbddb6ace2264873ce91 # latest
     )
 endif()
 
-FetchContent_MakeAvailable(glfw nanovg spdlog glew glm freetype miniaudio SPSCQueue RingBuffer muFFT sse_mathfun sse2neon nfd robin-hood)
+add_compile_definitions(FT_CONFIG_OPTION_SUBPIXEL_RENDERING)
+
+FetchContent_MakeAvailable(
+    glfw
+    nanovg
+    spdlog
+    glew
+    glm
+    freetype
+    miniaudio
+    SPSCQueue
+    RingBuffer
+    muFFT
+    sse_mathfun
+    sse2neon
+    nfd
+    robin-hood
+)
 
 add_library(nanovg)
 target_sources(nanovg PRIVATE ${CMAKE_BINARY_DIR}/_deps/nanovg-src/src/nanovg.c)
-target_include_directories(nanovg PUBLIC ${CMAKE_BINARY_DIR}/_deps/nanovg-src/src)
+target_include_directories(nanovg
+                           PUBLIC ${CMAKE_BINARY_DIR}/_deps/nanovg-src/src)
 target_compile_definitions(nanovg PRIVATE FONS_USE_FREETYPE)
 target_link_libraries(nanovg PRIVATE freetype)
 
 if(${SB_USE_METAL})
-    FetchContent_MakeAvailable(MetalNanoVG)
+  FetchContent_MakeAvailable(MetalNanoVG)
 
-    add_library(MetalNanoVG)
-    target_sources(MetalNanoVG PRIVATE ${CMAKE_BINARY_DIR}/_deps/metalnanovg-src/src/nanovg_mtl.m)
-    target_include_directories(MetalNanoVG PUBLIC ${CMAKE_BINARY_DIR}/_deps/metalnanovg-src/src)
-    target_link_libraries(MetalNanoVG PRIVATE nanovg "-framework Metal" "-framework QuartzCore")
+  add_library(MetalNanoVG)
+  target_sources(
+    MetalNanoVG
+    PRIVATE ${CMAKE_BINARY_DIR}/_deps/metalnanovg-src/src/nanovg_mtl.m)
+  target_include_directories(
+    MetalNanoVG PUBLIC ${CMAKE_BINARY_DIR}/_deps/metalnanovg-src/src)
+  target_link_libraries(MetalNanoVG PRIVATE nanovg "-framework Metal"
+                                            "-framework QuartzCore")
 endif()
 
 add_library(miniaudio INTERFACE)
-target_include_directories(miniaudio INTERFACE ${CMAKE_BINARY_DIR}/_deps/miniaudio-src)
+target_include_directories(miniaudio
+                           INTERFACE ${CMAKE_BINARY_DIR}/_deps/miniaudio-src)
 
 add_library(RingBuffer INTERFACE)
-target_include_directories(RingBuffer INTERFACE ${CMAKE_BINARY_DIR}/_deps/ringbuffer-src)
+target_include_directories(RingBuffer
+                           INTERFACE ${CMAKE_BINARY_DIR}/_deps/ringbuffer-src)
 
 add_library(sse_mathfun INTERFACE)
-target_include_directories(sse_mathfun INTERFACE ${CMAKE_BINARY_DIR}/_deps/sse_mathfun-src)
+target_include_directories(sse_mathfun
+                           INTERFACE ${CMAKE_BINARY_DIR}/_deps/sse_mathfun-src)
 
 add_library(sse2neon INTERFACE)
-target_include_directories(sse2neon INTERFACE ${CMAKE_BINARY_DIR}/_deps/sse2neon-src)
+target_include_directories(sse2neon
+                           INTERFACE ${CMAKE_BINARY_DIR}/_deps/sse2neon-src)

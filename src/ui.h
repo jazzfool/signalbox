@@ -2,6 +2,7 @@
 
 #include "util.h"
 #include "draw.h"
+#include "state.h"
 
 #include <string_view>
 #include <string>
@@ -12,6 +13,7 @@
 #include <robin_hood.h>
 #include <any>
 #include <deque>
+#include <spdlog/fmt/fmt.h>
 
 struct ui_key final {
     static ui_key root() {
@@ -80,37 +82,33 @@ struct ui_memory final {
         return std::any_cast<T&>(m_state.at(key.value()));
     }
 
-  private:
-    friend struct ui_key_guard;
+    template <typename... Args>
+    ui_key peek_key(Args&&... arg) {
+        return m_key_stack.back().next(m_next_ikey++, std::forward<Args>(arg)...);
+    }
 
+    template <typename... Args>
+    ui_key push_key(Args&&... arg) {
+        const auto key = peek_key(std::forward<Args>(arg)...);
+        m_key_stack.push_back(key);
+        return key;
+    }
+
+    void push_existing_key(ui_key key) {
+        m_key_stack.push_back(key);
+    }
+
+    template <typename... Args>
+    void pop_key() {
+        if (m_key_stack.size() > 1)
+            m_key_stack.pop_back();
+    }
+
+  private:
     std::deque<ui_key> m_key_stack;
     uint64 m_next_ikey = 0;
 
     robin_hood::unordered_flat_map<uint64, std::any> m_state;
-};
-
-struct ui_key_guard final {
-    ui_key_guard(const ui_key_guard&) = delete;
-    ui_key_guard& operator=(const ui_key_guard&) = delete;
-
-    ~ui_key_guard();
-
-    ui_key get() const {
-        return m_key;
-    }
-
-    ui_key operator*() const {
-        return m_key;
-    }
-
-  private:
-    friend struct ui_state;
-
-    template <typename... Args>
-    ui_key_guard(ui_state& state, Args&&... args);
-
-    ui_state* m_state;
-    ui_key m_key;
 };
 
 struct ui_state final {
@@ -135,38 +133,14 @@ struct ui_state final {
         focus_taken = true;
     }
 
-    template <typename... Args>
-    ui_key_guard push_key(Args&&... arg) {
-        return ui_key_guard{*this, std::forward<Args>(arg)...};
-    }
-
-    void push_layout(ui_layout& layout) {
-        layout_stack.push_back(&layout);
-    }
-
-    void pop_layout() {
-        layout_stack.pop_back();
-    }
-
-    ui_layout& active_layout() {
-        return *layout_stack.back();
+    bool has_focus(ui_key key) const {
+        return !key.is_null() && key == *focus;
     }
 
   private:
     ui_state() {
     }
 };
-
-inline ui_key_guard::~ui_key_guard() {
-    m_state->memory->m_key_stack.pop_back();
-}
-
-template <typename... Args>
-ui_key_guard::ui_key_guard(ui_state& state, Args&&... arg) : m_state{&state}, m_key{ui_key::null()} {
-    m_key =
-        m_state->memory->m_key_stack.back().next(m_state->memory->m_next_ikey++, std::forward<Args>(arg)...);
-    m_state->memory->m_key_stack.push_back(m_key);
-}
 
 template <typename T>
 T ui_default_or_insert() {
@@ -178,194 +152,358 @@ T& ui_get_state(ui_key key, OrInsert&& or_insert = ui_default_or_insert<T>) {
     return ui_state::get().memory->state<T, OrInsert>(key, std::forward<OrInsert>(or_insert));
 }
 
-struct ui_layout {
-    ui_layout(std::string_view namekey);
-
-    virtual vector2f32 min_size() final;
-    virtual void allocate_self(ui_layout& layout) final;
-    virtual rect2f32 allocate(vector2f32 size) final;
-    virtual rect2f32 last_allocated() const final;
-
-    virtual void begin() final;
-
-    rect2f32 rect;
-
-  protected:
-    virtual ui_key key() const final;
-    virtual vector2f32& get_min_size() final;
-    virtual rect2f32 allocate_rect(vector2f32 size) = 0;
-
-  private:
-    struct self_state final {
-        vector2f32 min_size;
-    };
-
-    ui_key_guard m_key;
-    self_state* m_state;
-    vector2f32 m_min_size;
-    rect2f32 m_last;
-};
-
-template <typename Layout>
-void ui_push_no_alloc_layout(Layout& layout) {
-    layout.begin();
-    ui_state::get().push_layout(layout);
+template <typename... Args>
+inline ui_key ui_peek_key(Args&&... arg) {
+    return ui_state::get().memory->peek_key(std::forward<Args>(arg)...);
 }
 
-template <typename Layout>
-void ui_push_layout(Layout& layout) {
-    layout.allocate_self(ui_state::get().active_layout());
-    ui_push_no_alloc_layout<Layout>(layout);
+template <typename... Args>
+inline ui_key ui_push_key(Args&&... arg) {
+    return ui_state::get().memory->push_key(std::forward<Args>(arg)...);
 }
 
-inline void ui_pop_layout() {
-    ui_state::get().pop_layout();
+inline void ui_push_existing_key(ui_key key) {
+    return ui_state::get().memory->push_existing_key(key);
 }
 
-template <typename Layout, typename Ui>
-void ui_with_layout(Layout& layout, Ui ui) {
-    ui_push_layout(layout);
-    ui();
-    ui_pop_layout();
+inline void ui_pop_key() {
+    return ui_state::get().memory->pop_key();
 }
 
-template <typename Layout, typename Ui>
-void ui_with_no_alloc_layout(Layout& layout, Ui ui) {
-    ui_push_no_alloc_layout(layout);
-    ui();
-    ui_pop_layout();
-}
+namespace ui {
 
-struct ui_exact final : ui_layout {
-    ui_exact();
-
-  protected:
-    virtual rect2f32 allocate_rect(vector2f32 size) override;
-
-  private:
-    bool m_once;
-};
-
-struct ui_sized final : ui_layout {
-    ui_sized();
-
-  protected:
-    virtual rect2f32 allocate_rect(vector2f32 size) override;
-};
-
-struct ui_fixed final : ui_layout {
-    ui_fixed(vector2f32 size);
-
-  protected:
-    virtual rect2f32 allocate_rect(vector2f32 size) override;
-
-  private:
-    vector2f32 m_size;
-};
-
-struct ui_padding final : ui_layout {
-    ui_padding();
-
-    float32 left = 0.f;
-    float32 right = 0.f;
-    float32 top = 0.f;
-    float32 bottom = 0.f;
-
-  protected:
-    virtual rect2f32 allocate_rect(vector2f32 size) override;
-
-  private:
-    bool m_once;
-};
-
-// lays out right-to-left
-struct ui_row2 final : ui_layout {
-    ui_row2();
-
-    float32 spacing = 0.f;
-
-  protected:
-    virtual rect2f32 allocate_rect(vector2f32 size) override;
-
-  private:
-    uint32 m_i;
-};
-
-struct ui_vstack final : ui_layout {
-    ui_vstack();
-
-    float32 spacing = 0.f;
-
-  protected:
-    virtual rect2f32 allocate_rect(vector2f32 size) override;
-};
-
-struct ui_func {
-    virtual void call() = 0;
-
-    void operator()() {
-        return this->call();
-    }
+struct widget_base {
+    virtual ~widget_base() = default;
+    virtual void operator()(const rect2f32& r) = 0;
 };
 
 template <typename F>
-struct ui_lambda_func final : ui_func {
+struct widget_functor final : widget_base {
+    void operator()(const rect2f32& r) override {
+        f(r);
+    }
+
+    explicit widget_functor(F&& f) : f{std::move(f)} {
+    }
+
     F f;
-
-    explicit ui_lambda_func(F&& f) : f{std::move(f)} {
-    }
-
-    void call() override {
-        f();
-    }
 };
 
 template <typename F>
-ui_lambda_func<F> ui_lambda(F&& f) {
-    return ui_lambda_func<F>{std::forward<F>(f)};
+struct layout_functor final {
+    layout_functor(F f) : f{f} {
+    }
+
+    layout_functor(const layout_functor&) = delete;
+    layout_functor& operator=(const layout_functor&) = delete;
+
+    layout_functor(layout_functor&&) = default;
+    layout_functor& operator=(layout_functor&&) = default;
+
+    layout_functor& operator()(auto&& child) {
+        vector2f32 sz;
+        auto c = std::move(child)(sz);
+        cs.push_back(std::make_unique<widget_functor<decltype(c)>>(std::move(c)));
+        szs.push_back(sz);
+        return *this;
+    }
+
+    auto operator()(vector2f32& out_sz) {
+        std::vector<rect2f32> rects;
+        rects.reserve(szs.size());
+        for (const auto& size : szs) {
+            rects.push_back({{}, size});
+        }
+        return [f = f(szs, out_sz), rects = std::move(rects), cs = std::move(cs)](const rect2f32& r) mutable {
+            f(rects, r);
+            assert(rects.size() == cs.size());
+            size_t i = 0;
+            for (auto& child : cs) {
+                (*child)(rects[i++]);
+            }
+        };
+    }
+
+    std::vector<vector2f32> szs;
+    std::vector<std::unique_ptr<widget_base>> cs;
+    F f;
+};
+
+auto layout(auto&& f) {
+    return layout_functor{std::forward<decltype(f)>(f)};
 }
 
-struct ui_text_opts final {
-    ui_text_opts();
+template <typename Out>
+const Out& grab(const Out& or_, const Out& x, const auto&...) {
+    return x;
+}
 
-    static ui_text_opts with_text(std::string_view text);
+template <typename Out, typename First, typename = std::enable_if_t<!std::is_same_v<Out, First>>>
+const Out& grab(const Out& or_, const First&, const auto&... rest) {
+    return grab(or_, rest...);
+}
 
-    vector2f32 measure() const;
+template <typename Out, typename Last, typename = std::enable_if_t<!std::is_same_v<Out, Last>>>
+const Out& grab(const Out& or_, const Last&) {
+    return or_;
+}
 
-    std::string text;
+template <typename Out>
+const Out& grab(const Out& or_) {
+    return or_;
+}
+
+struct spacing final {
+    float32 v;
+};
+
+struct font_size final {
+    float32 v;
+};
+
+struct tint final {
     NVGcolor color;
-    draw_font font;
-    float32 font_size;
-    text_align align;
+    float32 strength;
 };
 
-void ui_text(const ui_text_opts& opts);
+struct sides final {
+    float32 left;
+    float32 right;
+    float32 top;
+    float32 bottom;
 
-struct ui_button_opts final {
-    ui_button_opts();
+    static sides all(float32 x) {
+        sides s;
+        s.left = x;
+        s.right = x;
+        s.top = x;
+        s.bottom = x;
+        return s;
+    }
 
-    NVGcolor tint;
-    float32 tint_strength;
+    static sides xy(vector2f32 v) {
+        sides s;
+        s.left = v.x;
+        s.right = v.x;
+        s.top = v.y;
+        s.bottom = v.y;
+        return s;
+    }
+
+    vector2f32 offset() const {
+        return {left, top};
+    }
+
+    vector2f32 sum() const {
+        return {left + right, top + bottom};
+    }
 };
 
-bool ui_button(const ui_button_opts& opts, ui_func&& inner);
-bool ui_text_button(const ui_button_opts& opts, std::string_view text);
-
-struct ui_dropdown_box_opts final {
-    uint32* index = nullptr;
-    std::span<const std::string> options;
+static constexpr auto evalsize = [](auto&& f) {
+    vector2f32 sz;
+    std::move(f)(sz);
+    return sz;
 };
 
-void ui_dropdown_box(const ui_dropdown_box_opts& opts);
-
-struct ui_menu_opts final {
-    ui_menu_opts();
-
-    float32 font_size;
-    draw_font font;
-    float32 spacing;
-    uint32 current;
-    std::span<const std::string> options;
+static constexpr auto keyed = [](ui_key key, auto&& f) {
+    return [key, f = std::move(f)](vector2f32& sz) mutable {
+        ui_push_existing_key(key);
+        auto rf = std::move(f)(sz);
+        ui_pop_key();
+        return [rf = std::move(rf)](const rect2f32& r) mutable { rf(r); };
+    };
 };
 
-uint32 ui_menu(const ui_menu_opts& opts);
+static constexpr auto vstack = [](auto... options) {
+    const auto space = grab<spacing>({0.f}, options...).v;
+    return layout([=](const std::vector<vector2f32>& cs, vector2f32& sz) {
+        ui_push_key("vstack");
+
+        sz = {0.f, 0.f};
+        for (const auto& c : cs) {
+            sz.x = std::max(sz.x, c.x);
+            sz.y += c.y + space;
+        }
+        sz.y = std::max(sz.y - space, 0.f);
+
+        ui_pop_key();
+
+        return [=](std::vector<rect2f32>& cs, const rect2f32& r) {
+            auto pos = r.pos;
+            for (auto& c : cs) {
+                c.pos = pos;
+                pos.y += c.size.y + space;
+            }
+            ui_pop_key();
+        };
+    });
+};
+
+static constexpr auto hstack = [](auto... options) {
+    const auto space = grab<spacing>({0.f}, options...).v;
+    return layout([=](const std::vector<vector2f32>& cs, vector2f32& sz) {
+        ui_push_key("hstack");
+
+        sz = {0.f, 0.f};
+        for (const auto& c : cs) {
+            sz.x += c.x + space;
+            sz.y = std::max(sz.y, c.y);
+        }
+        sz.x = std::max(sz.x - space, 0.f);
+
+        ui_pop_key();
+
+        return [=](std::vector<rect2f32>& cs, const rect2f32& r) {
+            auto pos = r.pos;
+            for (auto& c : cs) {
+                c.pos = pos;
+                pos.x += c.size.x + space;
+            }
+        };
+    });
+};
+
+static constexpr auto padding = [](auto... options) {
+    const auto sides_ = grab<sides>(sides::all(0.f), options...);
+    return layout([=](const std::vector<vector2f32>& cs, vector2f32& sz) {
+        ui_push_key("padding");
+        sz = {0.f, 0.f};
+        for (const auto& c : cs) {
+            sz = glm::max(sz, c);
+        }
+        sz += sides_.sum();
+        ui_pop_key();
+        return [=](std::vector<rect2f32>& cs, const rect2f32& r) {
+            const auto maxsz = r.size - sides_.sum();
+            for (auto& c : cs) {
+                c.pos = r.pos + sides_.offset();
+                c.size = glm::min(c.size, maxsz);
+            }
+        };
+    });
+};
+
+static constexpr auto hside = [](auto&& left, auto&& right) {
+    return [left = std::move(left), right = std::move(right)](auto... options) {
+        const auto spacing_ = grab<spacing>({0.f}, options...).v;
+        return [spacing_, left = std::move(left), right = std::move(right)](vector2f32& sz) {
+            ui_push_key("hside");
+            vector2f32 leftsz, rightsz;
+            auto rleft = std::move(left)(leftsz);
+            auto rright = std::move(right)(rightsz);
+            sz.x = leftsz.x + rightsz.x + spacing_;
+            sz.y = std::max(leftsz.y, rightsz.y);
+            ui_pop_key();
+            return [=, rleft = std::move(rleft), rright = std::move(rright)](const rect2f32& r) {
+                // give right width priority
+                const auto rwidth = std::min(r.size.x, rightsz.x + spacing_);
+                const auto lwidth = r.size.x - rwidth;
+                rleft(rect2f32{r.pos, {lwidth, r.size.y}});
+                rright(rect2f32{{r.max().x - rwidth + spacing_, r.pos.y}, {rwidth, r.size.y}});
+            };
+        };
+    };
+};
+
+static constexpr auto minsize = [](auto&& inner) {
+    return [inner = std::move(inner)](auto... options) {
+        const auto minsz = grab<vector2f32>({0.f, 0.f}, options...);
+        return [minsz, inner = std::move(inner)](vector2f32& sz) {
+            ui_push_key("minsize");
+            auto rinner = std::move(inner)(sz);
+            sz = glm::max(sz, minsz);
+            ui_pop_key();
+            return [rinner = std::move(rinner)](const rect2f32& r) { rinner(r); };
+        };
+    };
+};
+
+static constexpr auto text = []<typename... Formats>(fmt::format_string<Formats...> fstr, Formats&&... fmts) {
+    const auto s = fmt::format(fstr, std::forward<Formats>(fmts)...);
+    return [s = std::move(s)](auto... options) {
+        auto& state = ui_state::get();
+        const auto color = grab<NVGcolor>(state.colors->fg, options...);
+        const auto font = grab<draw_font>(draw_font::sans, options...);
+        const auto size = grab<font_size>({state.opts->font_size}, options...).v;
+        const auto align = grab<text_align>(text_align::left_middle, options...);
+        return [=, s = std::move(s)](vector2f32& sz) {
+            sz = state.draw->measure_text(s, font, size);
+            return [=, s = std::move(s)](const rect2f32& r) {
+                const auto pos = align == text_align::center_middle
+                                     ? (r.min() + r.max()) / 2.f
+                                     : vector2f32{r.min().x, (r.min().y + r.max().y) / 2.f};
+                state.draw->text(pos, align, s, color, font, size);
+            };
+        };
+    };
+};
+
+static constexpr auto button = [](auto&& inner, auto onclick) {
+    return [inner = std::move(inner), onclick = std::move(onclick)](auto... options) {
+        const auto tint_ = grab<tint>({nvgRGB(0, 0, 0), 0.f}, options...);
+        auto padded = padding(sides::xy(ui_state::get().opts->text_pad));
+        padded(std::move(inner));
+        return [=, padded = std::move(padded), onclick = std::move(onclick)](vector2f32& sz) mutable {
+            ui_push_key("button");
+            auto rpadded = std::move(padded)(sz);
+            ui_pop_key();
+            return [=, rpadded = std::move(rpadded),
+                    onclick = std::move(onclick)](const rect2f32& r) mutable {
+                auto& state = ui_state::get();
+
+                const auto hover = state.input->take_hover(r);
+                const auto pressed = hover && state.input->mouse_is_pressed[0];
+                const auto clicked = hover && state.input->mouse_just_pressed[0];
+
+                auto from = blend_color(
+                    state.colors->button_from, state.colors->button_to, pressed ? 1.f : (hover ? 0.5f : 0.f));
+                auto to = state.colors->button_to;
+
+                from = blend_color(from, tint_.color, tint_.strength);
+                to = blend_color(to, tint_.color, tint_.strength);
+
+                state.draw->tb_grad_fill_rrect(r, state.opts->corner_radius, from, to);
+
+                state.draw->stroke_rrect(
+                    r.half_round(), state.opts->corner_radius, state.colors->button_border,
+                    state.opts->border_width);
+
+                rpadded(r);
+
+                if (clicked)
+                    onclick();
+            };
+        };
+    };
+};
+
+static constexpr auto dropdown = [](std::span<const std::string> enums, uint32& index) {
+    return [=, &index](auto... options) {
+        float32 minwidth = 0.f;
+        for (const auto& e : enums) {
+            const auto textsz = evalsize(text("{}", e)());
+            minwidth = std::max(minwidth, textsz.x);
+        }
+
+        const auto key = ui_peek_key("dropdown");
+
+        if (ui_state::get().has_focus(key)) {
+            ui_state::get().draw->push_layer();
+            auto vs = vstack();
+            for (size_t i = 0; i < enums.size(); ++i) {
+                vs(button(text("{}", enums[i])(), [i, &index]() { index = i; })());
+            }
+            vector2f32 sz;
+            vs(sz)(rect2f32{{20.f, 20.f}, sz});
+            ui_state::get().draw->pop_layer();
+        }
+
+        return keyed(
+            key, button(
+                     hside(minsize(text("{}", enums[index])())(vector2f32{minwidth, 0.f}), text("⯆")())(
+                         spacing{5.f}),
+                     [=] { ui_state::get().take_focus(key); })());
+    };
+};
+
+} // namespace ui

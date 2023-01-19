@@ -23,8 +23,12 @@ struct draw_list final {
 
     void fill_rrect(const rect2f32& rect, float32 radius, NVGcolor color);
     void stroke_rrect(const rect2f32& rect, float32 radius, NVGcolor color, float32 stroke_width);
-
     void tb_grad_fill_rrect(const rect2f32& rect, float32 radius, NVGcolor from, NVGcolor to);
+
+    void fill_circle(vector2f32 center, float32 radius, NVGcolor color);
+    void tb_grad_fill_circle(vector2f32 center, float32 radius, NVGcolor from, NVGcolor to);
+
+    void stroke_line(vector2f32 p0, vector2f32 p1, NVGcolor color, float32 stroke_width);
 
     vector2f32 measure_text(std::string_view text, draw_font font, float32 size) const;
     float32 line_height(draw_font font, float32 size) const;
@@ -52,6 +56,18 @@ struct draw_list final {
         cmd_paint paint;
     };
 
+    struct cmd_circle final {
+        vector2f32 center;
+        float32 radius = 0.f;
+        cmd_paint paint;
+    };
+
+    struct cmd_line final {
+        vector2f32 p0;
+        vector2f32 p1;
+        cmd_paint paint;
+    };
+
     struct cmd_text final {
         vector2f32 pos;
         text_align align = text_align::center_middle;
@@ -62,8 +78,8 @@ struct draw_list final {
     };
 
     struct command final {
-        enum { rrect, text } type;
-        std::variant<cmd_rrect, cmd_text> cmd;
+        enum { rrect, circle, line, text } type;
+        std::variant<cmd_rrect, cmd_circle, cmd_line, cmd_text> cmd;
     };
 
     NVGcontext* m_nvg;

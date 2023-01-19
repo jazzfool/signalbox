@@ -1,5 +1,5 @@
-#include "tracker.h"
+#include "app.h"
 
 int main() {
-    tracker{}.create().run_loop().destroy();
+    app{}.create().run_loop().destroy();
 }

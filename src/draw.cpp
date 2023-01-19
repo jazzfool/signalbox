@@ -38,6 +38,27 @@ void draw_list::execute() {
 
                 break;
             }
+            case command::circle: {
+                const auto& cmdcircle = std::get<cmd_circle>(cmd.cmd);
+
+                nvgBeginPath(m_nvg);
+                nvgCircle(m_nvg, cmdcircle.center.x, cmdcircle.center.y, cmdcircle.radius);
+                cmdcircle.paint.apply(
+                    m_nvg, {cmdcircle.center - vector2f32{cmdcircle.radius, cmdcircle.radius},
+                            2.f * vector2f32{cmdcircle.radius, cmdcircle.radius}});
+
+                break;
+            }
+            case command::line: {
+                const auto& cmdline = std::get<cmd_line>(cmd.cmd);
+
+                nvgBeginPath(m_nvg);
+                nvgMoveTo(m_nvg, cmdline.p0.x, cmdline.p0.y);
+                nvgLineTo(m_nvg, cmdline.p1.x, cmdline.p1.y);
+                cmdline.paint.apply(m_nvg, rect2f32::from_point_fit(cmdline.p0, cmdline.p1));
+
+                break;
+            }
             case command::text: {
                 const auto& cmdtext = std::get<cmd_text>(cmd.cmd);
 
@@ -107,6 +128,49 @@ void draw_list::tb_grad_fill_rrect(const rect2f32& rect, float32 radius, NVGcolo
     command cmd;
     cmd.type = command::rrect;
     cmd.cmd = cmdrrect;
+
+    m_list[m_layer].push_back(cmd);
+}
+
+void draw_list::fill_circle(vector2f32 center, float32 radius, NVGcolor color) {
+    cmd_circle cmdcircle;
+    cmdcircle.center = center;
+    cmdcircle.radius = radius;
+    cmdcircle.paint.color = color;
+
+    command cmd;
+    cmd.type = command::circle;
+    cmd.cmd = cmdcircle;
+
+    m_list[m_layer].push_back(cmd);
+}
+
+void draw_list::tb_grad_fill_circle(vector2f32 center, float32 radius, NVGcolor from, NVGcolor to) {
+    cmd_circle cmdcircle;
+    cmdcircle.center = center;
+    cmdcircle.radius = radius;
+    cmdcircle.paint.gradient = true;
+    cmdcircle.paint.gradient_from = from;
+    cmdcircle.paint.gradient_to = to;
+
+    command cmd;
+    cmd.type = command::circle;
+    cmd.cmd = cmdcircle;
+
+    m_list[m_layer].push_back(cmd);
+}
+
+void draw_list::stroke_line(vector2f32 p0, vector2f32 p1, NVGcolor color, float32 stroke_width) {
+    cmd_line cmdline;
+    cmdline.p0 = p0;
+    cmdline.p1 = p1;
+    cmdline.paint.stroke = true;
+    cmdline.paint.width = stroke_width;
+    cmdline.paint.color = color;
+
+    command cmd;
+    cmd.type = command::line;
+    cmd.cmd = cmdline;
 
     m_list[m_layer].push_back(cmd);
 }
