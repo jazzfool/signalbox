@@ -1,7 +1,8 @@
-cmake_minimum_required(VERSION 3.12)
+cmake_minimum_required(VERSION 3.25)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
 project(Signalbox C CXX)
 
@@ -27,6 +28,8 @@ endif()
 
 if(${APPLE})
     set(SB_USE_METAL ON)
+else()
+    set(SB_USE_METAL OFF)
 endif()
 
 if(${SB_USE_METAL})
@@ -35,6 +38,7 @@ if(${SB_USE_METAL})
 endif()
 
 add_executable(Signalbox ${Source})
+set_property(TARGET Signalbox PROPERTY CXX_STANDARD 20)
 
 add_subdirectory(ext)
 

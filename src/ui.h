@@ -3,7 +3,9 @@
 #include "util.h"
 #include "draw.h"
 #include "state.h"
+#include "linear.h"
 
+#include <optional>
 #include <string_view>
 #include <string>
 #include <nanovg.h>
@@ -11,70 +13,49 @@
 #include <functional>
 #include <span>
 #include <robin_hood.h>
-#include <any>
 #include <deque>
 #include <spdlog/fmt/fmt.h>
+#include <spdlog/spdlog.h>
+#include <any>
 
-struct ui_key final {
-    static ui_key root() {
-        return ui_key{0}.next(0);
-    }
+struct UI_Key final {
+    static UI_Key root();
+    static UI_Key null();
 
-    static ui_key null() {
-        return {};
-    }
-
-    bool is_null() const {
-        return m_null;
-    }
+    bool is_null() const;
 
     template <typename... Args>
-    ui_key next(Args&&... arg) const {
-        size_t hash = 0;
-        hash_combine(hash, m_hash, std::forward<Args>(arg)...);
-        return {hash};
+    UI_Key next(Args&&... arg) const {
+        size_t hash = m_hash;
+        hash_combine(hash, std::forward<Args>(arg)...);
+        auto key = UI_Key{static_cast<uint64>(hash)};
+        return key;
     }
 
-    uint64 value() const {
-        sb_ASSERT(!is_null());
-        return m_hash;
-    }
+    uint64 value() const;
 
-    bool operator==(const ui_key& rhs) const {
-        return !(is_null() != rhs.is_null() || value() != rhs.value());
-    }
-
-    bool operator!=(const ui_key& rhs) const {
-        return !(*this == rhs);
-    }
+    bool operator==(const UI_Key& rhs) const;
+    bool operator!=(const UI_Key& rhs) const;
 
   private:
-    ui_key(uint64 v) : m_null{false}, m_hash{v} {
-    }
-
-    ui_key() : m_null{true}, m_hash{UINT64_MAX} {
-    }
+    explicit UI_Key(uint64 v);
+    UI_Key();
 
     bool m_null;
     uint64 m_hash;
 };
 
-class space;
-struct input_state;
-struct ui_options;
-struct ui_colors;
-struct ui_state;
+struct Input_State;
+struct UI_Options;
+struct UI_Colors;
+struct UI_State;
 struct ui_layout;
 
-struct ui_memory final {
-    void begin_frame() {
-        m_key_stack.clear();
-        m_key_stack.push_back(ui_key::root());
-        m_next_ikey = 0;
-    }
+struct UI_Memory final {
+    void begin_frame();
 
     template <typename T, typename OrInsert>
-    T& state(ui_key key, OrInsert&& or_insert) {
+    T& state(UI_Key key, OrInsert&& or_insert) {
         static_assert(std::is_default_constructible_v<T>);
         if (!m_state.contains(key.value())) {
             m_state.emplace(key.value(), or_insert());
@@ -83,62 +64,104 @@ struct ui_memory final {
     }
 
     template <typename... Args>
-    ui_key peek_key(Args&&... arg) {
-        return m_key_stack.back().next(m_next_ikey++, std::forward<Args>(arg)...);
+    UI_Key peek_key(Args&&... arg) {
+        return m_key_stack.back().first.next(m_next_ikey++, std::forward<Args>(arg)...);
     }
 
     template <typename... Args>
-    ui_key push_key(Args&&... arg) {
+    UI_Key push_key(Args&&... arg) {
         const auto key = peek_key(std::forward<Args>(arg)...);
-        m_key_stack.push_back(key);
+        m_key_stack.emplace_back(key, m_next_ikey);
+        m_next_ikey = 0;
         return key;
     }
 
-    void push_existing_key(ui_key key) {
-        m_key_stack.push_back(key);
-    }
+    void push_existing_key(UI_Key key);
 
     template <typename... Args>
     void pop_key() {
-        if (m_key_stack.size() > 1)
+        if (m_key_stack.size() > 1) {
+            m_next_ikey = m_key_stack.back().second;
             m_key_stack.pop_back();
+        }
+    }
+
+    template <typename T>
+    Linear_Allocator_Typed<T> linear_alloc() {
+        return {*m_linear};
     }
 
   private:
-    std::deque<ui_key> m_key_stack;
+    std::deque<std::pair<UI_Key, uint64>> m_key_stack;
     uint64 m_next_ikey = 0;
 
     robin_hood::unordered_flat_map<uint64, std::any> m_state;
+
+    std::optional<Linear_Allocator> m_linear;
+    uint64 m_max_linear = 0;
 };
 
-struct ui_state final {
-    draw_list* draw = nullptr;
-    input_state* input = nullptr;
-    ui_memory* memory = nullptr;
-    ui_key* focus = nullptr;
+namespace ui {
+
+struct Widget_Base {
+    virtual ~Widget_Base() = default;
+    virtual void operator()(const Rect2_F32& r) = 0;
+};
+
+template <typename F>
+struct Widget_Functor final : Widget_Base {
+    void operator()(const Rect2_F32& r) override {
+        f(r);
+    }
+
+    explicit Widget_Functor(F&& f) : f{std::move(f)} {
+    }
+
+    F f;
+};
+
+} // namespace ui
+
+struct UI_State final {
+    UI_State(const UI_State&) = delete;
+    UI_State& operator=(const UI_State&) = delete;
+
+    Draw_List* draw = nullptr;
+
+    Input_State input;
+    UI_Memory memory;
+
+    UI_Key hot = UI_Key::null();
+    UI_Key prev_hot = UI_Key::null();
+    bool hot_taken = false;
+    UI_Key focus = UI_Key::null();
+    UI_Key prev_focus = UI_Key::null();
     bool focus_taken = false;
 
-    const ui_options* opts = nullptr;
-    const ui_colors* colors = nullptr;
+    UI_Options opts = UI_Options::default_options();
+    UI_Colors colors = UI_Colors::dark();
 
-    std::deque<ui_layout*> layout_stack;
+    std::vector<std::pair<std::unique_ptr<ui::Widget_Base>, Rect2_F32>> overlays;
 
-    static ui_state& get() {
-        static ui_state s;
-        return s;
+    static UI_State& get();
+
+    void begin_frame(Draw_List& out);
+    void end_frame();
+
+    void push_overlay(auto&& f, Vector2_F32 pos) {
+        Vector2_F32 sz;
+        auto rf = std::move(f)(sz);
+        overlays.emplace_back(
+            std::make_unique<ui::Widget_Functor<decltype(rf)>>(std::move(rf)), Rect2_F32{pos, sz});
     }
 
-    void take_focus(ui_key key) {
-        *focus = key;
-        focus_taken = true;
-    }
-
-    bool has_focus(ui_key key) const {
-        return !key.is_null() && key == *focus;
-    }
+    void take_hot(UI_Key key);
+    void take_focus(UI_Key key);
+    bool is_hot(UI_Key key) const;
+    bool has_focus(UI_Key key) const;
 
   private:
-    ui_state() {
+    UI_State() {
     }
 };
 
@@ -148,90 +171,126 @@ T ui_default_or_insert() {
 }
 
 template <typename T, typename OrInsert = decltype(ui_default_or_insert<T>)>
-T& ui_get_state(ui_key key, OrInsert&& or_insert = ui_default_or_insert<T>) {
-    return ui_state::get().memory->state<T, OrInsert>(key, std::forward<OrInsert>(or_insert));
+T& ui_get_state(UI_Key key, OrInsert&& or_insert = ui_default_or_insert<T>) {
+    return UI_State::get().memory.state<T, OrInsert>(key, std::forward<OrInsert>(or_insert));
 }
 
 template <typename... Args>
-inline ui_key ui_peek_key(Args&&... arg) {
-    return ui_state::get().memory->peek_key(std::forward<Args>(arg)...);
+inline UI_Key ui_peek_key(Args&&... arg) {
+    return UI_State::get().memory.peek_key(std::forward<Args>(arg)...);
 }
 
 template <typename... Args>
-inline ui_key ui_push_key(Args&&... arg) {
-    return ui_state::get().memory->push_key(std::forward<Args>(arg)...);
+inline UI_Key ui_push_key(Args&&... arg) {
+    return UI_State::get().memory.push_key(std::forward<Args>(arg)...);
 }
 
-inline void ui_push_existing_key(ui_key key) {
-    return ui_state::get().memory->push_existing_key(key);
+void ui_push_existing_key(UI_Key key);
+void ui_pop_key();
+
+template <typename T>
+inline Linear_Allocator_Typed<T> ui_linear_alloc() {
+    return UI_State::get().memory.linear_alloc<T>();
 }
 
-inline void ui_pop_key() {
-    return ui_state::get().memory->pop_key();
-}
+Linear_String ui_linear_str(const char* s);
 
 namespace ui {
-
-struct widget_base {
-    virtual ~widget_base() = default;
-    virtual void operator()(const rect2f32& r) = 0;
-};
+namespace {
 
 template <typename F>
-struct widget_functor final : widget_base {
-    void operator()(const rect2f32& r) override {
-        f(r);
+struct Layout_Functor final {
+    static constexpr std::size_t CHILD_FUNCTOR_SIZE = 512;
+
+    Layout_Functor(F f)
+        : szs{ui_linear_alloc<Vector2_F32>()}, cs{ui_linear_alloc<uint8[CHILD_FUNCTOR_SIZE]>()}, f{f} {
     }
 
-    explicit widget_functor(F&& f) : f{std::move(f)} {
+    ~Layout_Functor() {
+        for (auto& child : cs) {
+            reinterpret_cast<Widget_Base*>(&child)->~Widget_Base();
+        }
     }
 
-    F f;
-};
+    Layout_Functor(const Layout_Functor&) = delete;
+    Layout_Functor& operator=(const Layout_Functor&) = delete;
 
-template <typename F>
-struct layout_functor final {
-    layout_functor(F f) : f{f} {
+    Layout_Functor(Layout_Functor&& other)
+        : szs{std::move(other.szs)}, cs{std::move(other.cs)}, f(std::move(other.f)) {
     }
 
-    layout_functor(const layout_functor&) = delete;
-    layout_functor& operator=(const layout_functor&) = delete;
+    Layout_Functor& operator=(Layout_Functor&& other) {
+        szs = std::move(other.szs);
+        cs = std::move(other.cs);
+        f = std::move(other.f);
+        return *this;
+    }
 
-    layout_functor(layout_functor&&) = default;
-    layout_functor& operator=(layout_functor&&) = default;
+    Layout_Functor& operator()(auto&& child) {
+        Vector2_F32 sz;
 
-    layout_functor& operator()(auto&& child) {
-        vector2f32 sz;
         auto c = std::move(child)(sz);
-        cs.push_back(std::make_unique<widget_functor<decltype(c)>>(std::move(c)));
+        cs.emplace_back();
+        Widget_Functor<decltype(c)> wfunc{std::move(c)};
+        sb_ASSERT(sizeof(wfunc) <= CHILD_FUNCTOR_SIZE);
+        new (&cs.back()) decltype(wfunc)(std::move(wfunc));
+
         szs.push_back(sz);
         return *this;
     }
 
-    auto operator()(vector2f32& out_sz) {
-        std::vector<rect2f32> rects;
+    auto operator()(Vector2_F32& out_sz) {
+        Linear_Vector<Rect2_F32> rects{ui_linear_alloc<Rect2_F32>()};
         rects.reserve(szs.size());
         for (const auto& size : szs) {
             rects.push_back({{}, size});
         }
-        return [f = f(szs, out_sz), rects = std::move(rects), cs = std::move(cs)](const rect2f32& r) mutable {
-            f(rects, r);
-            assert(rects.size() == cs.size());
-            size_t i = 0;
-            for (auto& child : cs) {
-                (*child)(rects[i++]);
-            }
-        };
+        return
+            [f = f(szs, out_sz), rects = std::move(rects), cs = std::move(cs)](const Rect2_F32& r) mutable {
+                f(rects, r);
+                assert(rects.size() == cs.size());
+                size_t i = 0;
+                for (auto& child : cs) {
+                    const auto pchild = reinterpret_cast<Widget_Base*>(&child);
+                    (*pchild)(rects[i++]);
+                }
+            };
     }
 
-    std::vector<vector2f32> szs;
-    std::vector<std::unique_ptr<widget_base>> cs;
+    struct buf {
+        uint8 m[CHILD_FUNCTOR_SIZE];
+    };
+
+    Linear_Vector<Vector2_F32> szs;
+    Linear_Vector<buf> cs;
     F f;
 };
 
 auto layout(auto&& f) {
-    return layout_functor{std::forward<decltype(f)>(f)};
+    return Layout_Functor{std::forward<decltype(f)>(f)};
 }
+
+template <typename... Args>
+auto chain(auto&& f, Args&&... arg) {
+    (f(std::forward<Args>(arg)), ...);
+    return f;
+}
+
+template <typename T, typename Tag = decltype([] {})>
+struct Value final {
+    Value(T v) : v{v} {
+    }
+
+    T& operator*() noexcept {
+        return v;
+    }
+
+    const T& operator*() const noexcept {
+        return v;
+    }
+
+    T v;
+};
 
 template <typename Out>
 const Out& grab(const Out& or_, const Out& x, const auto&...) {
@@ -253,27 +312,24 @@ const Out& grab(const Out& or_) {
     return or_;
 }
 
-struct spacing final {
-    float32 v;
-};
+using Spacing = Value<float32>;
+using Font_Size = Value<float32>;
 
-struct font_size final {
-    float32 v;
-};
-
-struct tint final {
+struct Tint final {
     NVGcolor color;
     float32 strength;
 };
 
-struct sides final {
+using Fill_Crossaxis = Value<bool>;
+
+struct Sides final {
     float32 left;
     float32 right;
     float32 top;
     float32 bottom;
 
-    static sides all(float32 x) {
-        sides s;
+    static Sides all(float32 x) {
+        Sides s;
         s.left = x;
         s.right = x;
         s.top = x;
@@ -281,8 +337,8 @@ struct sides final {
         return s;
     }
 
-    static sides xy(vector2f32 v) {
-        sides s;
+    static Sides xy(Vector2_F32 v) {
+        Sides s;
         s.left = v.x;
         s.right = v.x;
         s.top = v.y;
@@ -290,90 +346,151 @@ struct sides final {
         return s;
     }
 
-    vector2f32 offset() const {
+    Vector2_F32 offset() const {
         return {left, top};
     }
 
-    vector2f32 sum() const {
+    Vector2_F32 sum() const {
         return {left + right, top + bottom};
     }
 };
 
-static constexpr auto evalsize = [](auto&& f) {
-    vector2f32 sz;
+using Width = Value<float32>;
+
+auto evalsize(auto&& f) {
+    Vector2_F32 sz;
     std::move(f)(sz);
     return sz;
 };
 
-static constexpr auto keyed = [](ui_key key, auto&& f) {
-    return [key, f = std::move(f)](vector2f32& sz) mutable {
-        ui_push_existing_key(key);
-        auto rf = std::move(f)(sz);
-        ui_pop_key();
-        return [rf = std::move(rf)](const rect2f32& r) mutable { rf(r); };
+auto keyed(UI_Key key, auto&& f) {
+    ui_push_existing_key(key);
+    auto r = std::move(f)();
+    ui_pop_key();
+    return r;
+};
+
+auto unsized(auto&& f) {
+    return [f = std::move(f)](const Rect2_F32& r) {
+        Vector2_F32 sz;
+        std::move(f)(sz)(r);
     };
 };
 
-static constexpr auto vstack = [](auto... options) {
-    const auto space = grab<spacing>({0.f}, options...).v;
-    return layout([=](const std::vector<vector2f32>& cs, vector2f32& sz) {
-        ui_push_key("vstack");
+auto drawn(const Vector2_F32& sz, auto&& f) {
+    return [sz, f = std::move(f)](Vector2_F32& out_sz) {
+        out_sz = sz;
+        return [f = std::move(f)](const Rect2_F32& r) { f(r); };
+    };
+};
 
+auto before(auto&& f, auto&& before) {
+    return [f = std::move(f), before = std::move(before)](Vector2_F32& sz) mutable {
+        auto rf = std::move(f)(sz);
+        return [rf = std::move(rf), before = std::move(before)](const Rect2_F32& r) mutable {
+            unsized(std::move(before))(r);
+            std::move(rf)(r);
+        };
+    };
+};
+
+auto sandwich(auto&& f, auto&& before, auto&& after) {
+    return [f = std::move(f), before = std::move(before), after = std::move(after)](Vector2_F32& sz) mutable {
+        auto rf = std::move(f)(sz);
+        return [rf = std::move(rf), before = std::move(before),
+                after = std::move(after)](const Rect2_F32& r) mutable {
+            unsized(std::move(before))(r);
+            std::move(rf)(r);
+            unsized(std::move(after))(r);
+        };
+    };
+};
+
+auto empty(Vector2_F32& sz) {
+    sz = {0.f, 0.f};
+    return [](const Rect2_F32&) {};
+};
+
+auto iff(bool c, auto&& inner) {
+    return [c, inner = std::move(inner)](Vector2_F32& sz) mutable {
+        std::optional<decltype(std::move(inner)(sz))> rinner;
+        sz = {0.f, 0.f};
+        if (c)
+            rinner.emplace(std::move(inner)(sz));
+        return [c, rinner = std::move(rinner)](const Rect2_F32& r) mutable {
+            if (rinner)
+                (*rinner)(r);
+        };
+    };
+}
+
+auto vstack(auto... options) {
+    const auto space = *grab<Spacing>({0.f}, options...);
+    const auto xfill = *grab<Fill_Crossaxis>({false}, options...);
+    return layout([=](const Linear_Vector<Vector2_F32>& cs, Vector2_F32& sz) {
         sz = {0.f, 0.f};
         for (const auto& c : cs) {
             sz.x = std::max(sz.x, c.x);
             sz.y += c.y + space;
         }
         sz.y = std::max(sz.y - space, 0.f);
-
-        ui_pop_key();
-
-        return [=](std::vector<rect2f32>& cs, const rect2f32& r) {
+        return [=](Linear_Vector<Rect2_F32>& cs, const Rect2_F32& r) {
             auto pos = r.pos;
             for (auto& c : cs) {
                 c.pos = pos;
                 pos.y += c.size.y + space;
+                if (xfill)
+                    c.size.x = r.size.x;
             }
-            ui_pop_key();
         };
     });
 };
 
-static constexpr auto hstack = [](auto... options) {
-    const auto space = grab<spacing>({0.f}, options...).v;
-    return layout([=](const std::vector<vector2f32>& cs, vector2f32& sz) {
-        ui_push_key("hstack");
-
+auto hstack(auto... options) {
+    const auto space = *grab<Spacing>({0.f}, options...);
+    const auto yfill = *grab<Fill_Crossaxis>({false}, options...);
+    return layout([=](const Linear_Vector<Vector2_F32>& cs, Vector2_F32& sz) {
         sz = {0.f, 0.f};
         for (const auto& c : cs) {
             sz.x += c.x + space;
             sz.y = std::max(sz.y, c.y);
         }
         sz.x = std::max(sz.x - space, 0.f);
-
-        ui_pop_key();
-
-        return [=](std::vector<rect2f32>& cs, const rect2f32& r) {
+        return [=](Linear_Vector<Rect2_F32>& cs, const Rect2_F32& r) {
             auto pos = r.pos;
             for (auto& c : cs) {
                 c.pos = pos;
                 pos.x += c.size.x + space;
+                if (yfill)
+                    c.size.y = r.size.y;
             }
         };
     });
 };
 
-static constexpr auto padding = [](auto... options) {
-    const auto sides_ = grab<sides>(sides::all(0.f), options...);
-    return layout([=](const std::vector<vector2f32>& cs, vector2f32& sz) {
-        ui_push_key("padding");
+auto zstack(auto... options) {
+    return layout([=](const Linear_Vector<Vector2_F32>& cs, Vector2_F32& sz) {
+        sz = {0.f, 0.f};
+        for (const auto& c : cs) {
+            sz = glm::max(sz, c);
+        }
+        return [=](Linear_Vector<Rect2_F32>& cs, const Rect2_F32& r) {
+            for (auto& c : cs) {
+                c = r;
+            }
+        };
+    });
+}
+
+auto padding(auto... options) {
+    const auto sides_ = grab<Sides>(Sides::all(0.f), options...);
+    return layout([sides_](const Linear_Vector<Vector2_F32>& cs, Vector2_F32& sz) {
         sz = {0.f, 0.f};
         for (const auto& c : cs) {
             sz = glm::max(sz, c);
         }
         sz += sides_.sum();
-        ui_pop_key();
-        return [=](std::vector<rect2f32>& cs, const rect2f32& r) {
+        return [sides_](Linear_Vector<Rect2_F32>& cs, const Rect2_F32& r) {
             const auto maxsz = r.size - sides_.sum();
             for (auto& c : cs) {
                 c.pos = r.pos + sides_.offset();
@@ -381,103 +498,151 @@ static constexpr auto padding = [](auto... options) {
             }
         };
     });
-};
+}
 
-static constexpr auto hside = [](auto&& left, auto&& right) {
-    return [left = std::move(left), right = std::move(right)](auto... options) {
-        const auto spacing_ = grab<spacing>({0.f}, options...).v;
-        return [spacing_, left = std::move(left), right = std::move(right)](vector2f32& sz) {
-            ui_push_key("hside");
-            vector2f32 leftsz, rightsz;
+auto hside(auto&& left, auto&& right) {
+    return [left = std::move(left), right = std::move(right)](auto... options) mutable {
+        const auto spacing_ = *grab<Spacing>({0.f}, options...);
+        return [spacing_, left = std::move(left), right = std::move(right)](Vector2_F32& sz) mutable {
+            Vector2_F32 leftsz, rightsz;
             auto rleft = std::move(left)(leftsz);
             auto rright = std::move(right)(rightsz);
             sz.x = leftsz.x + rightsz.x + spacing_;
             sz.y = std::max(leftsz.y, rightsz.y);
-            ui_pop_key();
-            return [=, rleft = std::move(rleft), rright = std::move(rright)](const rect2f32& r) {
+            return [=, rleft = std::move(rleft), rright = std::move(rright)](const Rect2_F32& r) mutable {
                 // give right width priority
                 const auto rwidth = std::min(r.size.x, rightsz.x + spacing_);
                 const auto lwidth = r.size.x - rwidth;
-                rleft(rect2f32{r.pos, {lwidth, r.size.y}});
-                rright(rect2f32{{r.max().x - rwidth + spacing_, r.pos.y}, {rwidth, r.size.y}});
+                rleft(Rect2_F32{r.pos, {lwidth, r.size.y}});
+                rright(Rect2_F32{{r.max().x - rwidth + spacing_, r.pos.y}, {rwidth, r.size.y}});
             };
         };
     };
-};
+}
 
-static constexpr auto minsize = [](auto&& inner) {
-    return [inner = std::move(inner)](auto... options) {
-        const auto minsz = grab<vector2f32>({0.f, 0.f}, options...);
-        return [minsz, inner = std::move(inner)](vector2f32& sz) {
-            ui_push_key("minsize");
+auto minsize(auto&& inner) {
+    return [inner = std::move(inner)](auto... options) mutable {
+        const auto minsz = grab<Vector2_F32>({0.f, 0.f}, options...);
+        return [minsz, inner = std::move(inner)](Vector2_F32& sz) mutable {
             auto rinner = std::move(inner)(sz);
             sz = glm::max(sz, minsz);
-            ui_pop_key();
-            return [rinner = std::move(rinner)](const rect2f32& r) { rinner(r); };
+            return [rinner = std::move(rinner)](const Rect2_F32& r) mutable { std::move(rinner)(r); };
         };
     };
-};
+}
 
-static constexpr auto text = []<typename... Formats>(fmt::format_string<Formats...> fstr, Formats&&... fmts) {
-    const auto s = fmt::format(fstr, std::forward<Formats>(fmts)...);
+template <typename... Args>
+auto text(fmt::string_view fstr, const Args&... args) {
+    const auto s = linear_format(ui_linear_alloc<char>(), fstr, args...);
     return [s = std::move(s)](auto... options) {
-        auto& state = ui_state::get();
-        const auto color = grab<NVGcolor>(state.colors->fg, options...);
-        const auto font = grab<draw_font>(draw_font::sans, options...);
-        const auto size = grab<font_size>({state.opts->font_size}, options...).v;
-        const auto align = grab<text_align>(text_align::left_middle, options...);
-        return [=, s = std::move(s)](vector2f32& sz) {
+        auto& state = UI_State::get();
+        const auto color = grab<NVGcolor>(state.colors.fg, options...);
+        const auto font = grab<Draw_Font>(Draw_Font::Sans, options...);
+        const auto size = *grab<Font_Size>({state.opts.font_size}, options...);
+        const auto align = grab<Text_Align>(Text_Align::Left_Middle, options...);
+        return [=, &state, s = std::move(s)](Vector2_F32& sz) {
             sz = state.draw->measure_text(s, font, size);
-            return [=, s = std::move(s)](const rect2f32& r) {
-                const auto pos = align == text_align::center_middle
+            return [=, &state, s = std::move(s)](const Rect2_F32& r) {
+                const auto pos = align == Text_Align::Center_Middle
                                      ? (r.min() + r.max()) / 2.f
-                                     : vector2f32{r.min().x, (r.min().y + r.max().y) / 2.f};
+                                     : Vector2_F32{r.min().x, (r.min().y + r.max().y) / 2.f};
                 state.draw->text(pos, align, s, color, font, size);
             };
         };
     };
+}
+
+struct Interaction final {
+    bool hover : 1 = false;
+    bool click : 1 = false;
+    bool press : 1 = false;
+    bool focus : 1 = false;
 };
 
-static constexpr auto button = [](auto&& inner, auto onclick) {
-    return [inner = std::move(inner), onclick = std::move(onclick)](auto... options) {
-        const auto tint_ = grab<tint>({nvgRGB(0, 0, 0), 0.f}, options...);
-        auto padded = padding(sides::xy(ui_state::get().opts->text_pad));
-        padded(std::move(inner));
-        return [=, padded = std::move(padded), onclick = std::move(onclick)](vector2f32& sz) mutable {
-            ui_push_key("button");
-            auto rpadded = std::move(padded)(sz);
-            ui_pop_key();
-            return [=, rpadded = std::move(rpadded),
-                    onclick = std::move(onclick)](const rect2f32& r) mutable {
-                auto& state = ui_state::get();
+auto mux(auto&&... fs) {
+    return [... fs = std::move(fs)](auto&& x) { (fs(std::forward<decltype(x)>(x)), ...); };
+}
 
-                const auto hover = state.input->take_hover(r);
-                const auto pressed = hover && state.input->mouse_is_pressed[0];
-                const auto clicked = hover && state.input->mouse_just_pressed[0];
+auto onclick(auto&& f) {
+    return [f = std::move(f)](const Interaction& itr) {
+        if (itr.click)
+            f();
+    };
+}
 
-                auto from = blend_color(
-                    state.colors->button_from, state.colors->button_to, pressed ? 1.f : (hover ? 0.5f : 0.f));
-                auto to = state.colors->button_to;
+auto interact(auto&& cb) {
+    return [cb = std::move(cb)](auto&& inner) mutable {
+        const auto key = ui_peek_key("interact");
+        return [key, cb = std::move(cb), inner = std::move(inner)](Vector2_F32& sz) mutable {
+            auto rinner = std::move(inner)(sz);
+            return [key, cb = std::move(cb), rinner = std::move(rinner)](const Rect2_F32& r) mutable {
+                auto& state = UI_State::get();
 
-                from = blend_color(from, tint_.color, tint_.strength);
-                to = blend_color(to, tint_.color, tint_.strength);
+                Interaction itr;
 
-                state.draw->tb_grad_fill_rrect(r, state.opts->corner_radius, from, to);
+                if (state.has_focus(key)) {
+                    itr.focus = true;
+                }
 
-                state.draw->stroke_rrect(
-                    r.half_round(), state.opts->corner_radius, state.colors->button_border,
-                    state.opts->border_width);
+                if (state.is_hot(key)) {
+                    itr.hover = true;
+                    itr.press = state.input.mouse_is_pressed[0];
+                    if (state.input.mouse_just_pressed[0]) {
+                        state.take_focus(key);
+                        itr.click = true;
+                    }
+                }
 
-                rpadded(r);
+                if (state.input.hover(r)) {
+                    state.take_hot(key);
+                }
 
-                if (clicked)
-                    onclick();
+                std::move(cb)(itr);
+
+                rinner(r);
             };
         };
     };
-};
+}
 
-static constexpr auto dropdown = [](std::span<const std::string> enums, uint32& index) {
+auto button(auto&& inner, auto&& cb) {
+    return [inner = std::move(inner), cb = std::move(cb)](auto... options) mutable {
+        const auto key = ui_push_key(consthash("button"));
+        struct S {
+            Interaction itr;
+        }& s = ui_get_state<S>(key);
+
+        const auto tint_ = grab<Tint>({nvgRGB(0, 0, 0), 0.f}, options...);
+        auto r = interact([&s, cb = std::move(cb)](Interaction itr) mutable {
+            s.itr = itr;
+            std::move(cb)(itr);
+        })(
+            before(
+                padding(Sides::xy(UI_State::get().opts.text_pad))(std::move(inner)),
+                drawn({0.f, 0.f}, [&s, tint_](const Rect2_F32& r) {
+                    auto& state = UI_State::get();
+
+                    auto from = blend_color(
+                        state.colors.button_from, state.colors.button_to,
+                        s.itr.press ? 1.f : (s.itr.hover ? 0.5f : 0.f));
+                    auto to = state.colors.button_to;
+
+                    from = blend_color(from, tint_.color, tint_.strength);
+                    to = blend_color(to, tint_.color, tint_.strength);
+
+                    state.draw->tb_grad_fill_rrect(r, state.opts.corner_radius, from, to);
+
+                    state.draw->stroke_rrect(
+                        r.half_round(), state.opts.corner_radius, state.colors.button_border,
+                        state.opts.border_width);
+                })));
+
+        ui_pop_key(); // button
+        return r;
+    };
+}
+
+auto dropdown(std::span<const std::string_view> enums, uint32& index) {
     return [=, &index](auto... options) {
         float32 minwidth = 0.f;
         for (const auto& e : enums) {
@@ -485,25 +650,142 @@ static constexpr auto dropdown = [](std::span<const std::string> enums, uint32& 
             minwidth = std::max(minwidth, textsz.x);
         }
 
-        const auto key = ui_peek_key("dropdown");
+        const auto key = ui_push_key(consthash("dropdown"));
 
-        if (ui_state::get().has_focus(key)) {
-            ui_state::get().draw->push_layer();
-            auto vs = vstack();
+        ui_push_key(consthash("dropdown_menu"));
+        auto& state = UI_State::get();
+        if (state.has_focus(key)) {
+            auto vs = vstack(Fill_Crossaxis{true});
             for (size_t i = 0; i < enums.size(); ++i) {
-                vs(button(text("{}", enums[i])(), [i, &index]() { index = i; })());
+                const auto itemkey = ui_push_key(consthash("item"), i);
+                auto& s = ui_get_state<Interaction>(itemkey);
+
+                static constexpr auto menubutton = [](Interaction& s, size_t i, uint32& index,
+                                                      std::string_view e) {
+                    return interact([&s, i, &index](Interaction itr) {
+                        s = itr;
+                        if (itr.click) {
+                            index = i;
+                        }
+                    })(
+                        before(
+                            padding(Sides::xy(UI_State::get().opts.text_pad))(text("{}", e)()),
+                            drawn({0.f, 0.f}, [&s](const Rect2_F32& r) {
+                                auto& state = UI_State::get();
+                                if (s.hover)
+                                    state.draw->fill_rrect(
+                                        r, state.opts.corner_radius, state.colors.highlight_bg);
+                            })));
+                };
+
+                vs(menubutton(s, i, index, enums[i]));
+
+                ui_pop_key(); // item, i
             }
-            vector2f32 sz;
-            vs(sz)(rect2f32{{20.f, 20.f}, sz});
-            ui_state::get().draw->pop_layer();
+
+            auto overlay = before(padding(Sides::all(2.f))(vs), drawn({}, [](const Rect2_F32& r) {
+                                      auto& state = UI_State::get();
+                                      state.draw->fill_rrect(r, state.opts.corner_radius, state.colors.bg);
+                                      state.draw->stroke_rrect(
+                                          r.half_round(), state.opts.corner_radius, state.colors.border, 1.f);
+                                  }));
+
+            state.push_overlay(std::move(overlay), {20.f, 20.f});
         }
+        ui_pop_key(); // dropdown_menu
 
-        return keyed(
-            key, button(
-                     hside(minsize(text("{}", enums[index])())(vector2f32{minwidth, 0.f}), text("⯆")())(
-                         spacing{5.f}),
-                     [=] { ui_state::get().take_focus(key); })());
+        auto r = button(
+            hside(minsize(text("{}", enums[index])())(Vector2_F32{minwidth, 0.f}), text("⯆")())(Spacing{5.f}),
+            [=](Interaction itr) {
+                if (itr.click)
+                    UI_State::get().take_focus(key);
+            })();
+
+        ui_pop_key(); // dropdown
+        return r;
     };
-};
+}
 
+using Placeholder = Value<Linear_String>;
+
+auto textbox(std::string& txt) {
+    return [&txt](auto... options) {
+        auto& state = UI_State::get();
+
+        const auto placeholder_ = *grab<Placeholder>({ui_linear_str("")}, options...);
+        const auto width_ = *grab<Width>({100.f}, options...);
+        const auto font_size_ = *grab<Font_Size>({state.opts.font_size}, options...);
+
+        const auto key = ui_push_key(consthash("textbox"));
+
+        struct S {
+            Interaction itr;
+            uint32 cursor = 0;
+        }& s = ui_get_state<S>(key);
+
+        auto zs = chain(
+            zstack(),
+            //
+            drawn(
+                {},
+                [&s, &state](const Rect2_F32& r) {
+                    state.draw->fill_rrect(
+                        r, state.opts.corner_radius,
+                        s.itr.focus ? state.colors.input_focus_bg : state.colors.input_bg);
+
+                    state.draw->stroke_rrect(
+                        r.half_round(), state.opts.corner_radius,
+                        s.itr.focus ? state.colors.focus_border : state.colors.border,
+                        state.opts.border_width);
+                }),
+            //
+            minsize(interact([&s, &state, &txt](Interaction itr) {
+                s.itr = itr;
+                if (itr.focus) {
+                    if (s.cursor > 0 && state.input.keys_just_pressed[GLFW_KEY_LEFT]) {
+                        --s.cursor;
+                    }
+                    if (s.cursor < txt.size() && state.input.keys_just_pressed[GLFW_KEY_RIGHT]) {
+                        ++s.cursor;
+                    }
+
+                    if (state.input.text) {
+                        txt.insert(txt.begin() + s.cursor++, *state.input.text);
+                    }
+
+                    if (s.cursor > 0 && state.input.keys_just_pressed[GLFW_KEY_BACKSPACE]) {
+                        txt.erase(txt.begin() + --s.cursor);
+                    }
+
+                    if (state.input.keys_just_pressed[GLFW_KEY_ENTER]) {
+                        state.take_focus(UI_Key::null());
+                    }
+                }
+            })(padding(Sides::xy(state.opts.text_pad))(text("{}", txt)(Draw_Font::Mono))))(
+                Vector2_F32{width_, 0.f}),
+            //
+            iff(s.itr.focus, drawn({}, [=, &s, &state, &txt](const Rect2_F32& r) {
+                    float32 cwidth = 0.f;
+                    state.draw->measure_text("A", Draw_Font::Mono, font_size_, &cwidth);
+
+                    state.draw->fill_rrect(
+                        {r.pos + Vector2_F32{cwidth * s.cursor + state.opts.text_pad.x, 2.f},
+                         {cwidth, r.size.y - 4.f}},
+                        0.f, state.colors.fg);
+
+                    if (s.cursor < txt.size()) {
+                        state.draw->text(
+                            r.pos + state.opts.text_pad + Vector2_F32{cwidth * s.cursor, font_size_ / 2.f},
+                            Text_Align::Left_Middle, txt.substr(s.cursor, 1), state.colors.input_focus_bg,
+                            Draw_Font::Mono, font_size_);
+                    }
+                })));
+
+        ui_pop_key(); // textbox
+
+        return zs;
+    };
+}
+
+} // namespace
 } // namespace ui

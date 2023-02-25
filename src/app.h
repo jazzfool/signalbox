@@ -2,31 +2,28 @@
 
 #include "context.h"
 #include "util.h"
-#include "state.h"
-#include "ui.h"
 #include "tracker/tracker.h"
+#include "draw.h"
+
+#include <optional>
 
 struct GLFWwindow;
 
-class app final {
+class App final {
   public:
-    app();
-    app& create();
+    App();
+    App& create();
     void destroy();
 
-    app& run_loop();
+    App& run_loop();
 
   private:
     void ui();
     void draw_frame();
 
-    context m_cx;
+    Context m_cx;
     float32 m_dpi_scale;
-    input_state m_input;
-    ui_memory m_memory;
-    ui_key m_focus;
-    ui_options m_ui_opts;
-    ui_colors m_ui_colors;
+    std::optional<Draw_List> m_draw;
 
-    tracker m_tracker;
+    Tracker m_tracker;
 };

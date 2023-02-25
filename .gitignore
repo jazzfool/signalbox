@@ -38,3 +38,4 @@ CMakeSettings.json
 /*build*
 .idea/
 CMakeLists.txt.user
+.cache/

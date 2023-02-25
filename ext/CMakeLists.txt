@@ -37,7 +37,7 @@ FetchContent_Declare(
 FetchContent_Declare(
     freetype
     GIT_REPOSITORY https://github.com/freetype/freetype.git
-    GIT_TAG e8ebfe988b5f57bfb9a3ecb13c70d9791bce9ecf # v2.12.1
+    GIT_TAG de8b92dd7ec634e9e2b25ef534c54a3537555c11 # v2.12.1
 )
 
 FetchContent_Declare(
@@ -60,8 +60,8 @@ FetchContent_Declare(
 
 FetchContent_Declare(
     muFFT
-    GIT_REPOSITORY https://github.com/Themaister/muFFT.git
-    GIT_TAG 47bb08652eab399c2c7d460abe5184857110f130 # latest
+    GIT_REPOSITORY https://github.com/jazzfool/muFFT.git
+    GIT_TAG 58f8b35 # latest
 )
 
 FetchContent_Declare(

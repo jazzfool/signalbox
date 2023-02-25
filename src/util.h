@@ -37,89 +37,89 @@ using float32 = float;
 using float64 = double;
 
 template <typename T>
-using vector2 = glm::tvec2<T>;
+using Vector2 = glm::tvec2<T>;
 
 #define NVG_RECT_ARGS(arg_rect) arg_rect.pos.x, arg_rect.pos.y, arg_rect.size.x, arg_rect.size.y
 
 template <typename T>
-struct rect2 {
-    vector2<T> pos, size;
+struct Rect2 {
+    Vector2<T> pos, size;
 
-    static rect2 from_min_max(vector2<T> min, vector2<T> max) {
+    static Rect2 from_min_max(Vector2<T> min, Vector2<T> max) {
         return {min, max - min};
     }
 
     template <typename... Args>
-    static rect2 from_point_fit(const Args&... arg) {
-        vector2<T> min, max;
+    static Rect2 from_point_fit(const Args&... arg) {
+        Vector2<T> min, max;
         ((min = glm::min(min, arg), max = glm::max(max, arg)), ...);
-        return rect2::from_min_max(min, max);
+        return Rect2::from_min_max(min, max);
     }
 
-    static rect2 from_point_list_fit(std::span<vector2<T>> points) {
-        vector2<T> min, max;
+    static Rect2 from_point_list_fit(std::span<Vector2<T>> points) {
+        Vector2<T> min, max;
         for (const auto& p : points) {
             min = glm::min(min, p);
             max = glm::max(max, p);
         }
-        return rect2::from_min_max(min, max);
+        return Rect2::from_min_max(min, max);
     }
 
-    vector2<T> min() const {
+    Vector2<T> min() const {
         return pos;
     }
 
-    vector2<T> max() const {
+    Vector2<T> max() const {
         return {pos.x + size.x, pos.y + size.y};
     }
 
-    vector2<T> center() const {
+    Vector2<T> center() const {
         return {
             pos.x + static_cast<T>(static_cast<float64>(size.x) / 2.f),
             pos.y + static_cast<T>(static_cast<float64>(size.y) / 2.f),
         };
     }
 
-    bool contains(const vector2<T>& point) const {
+    bool contains(const Vector2<T>& point) const {
         return point.x > pos.x && point.y > pos.y && point.x < max().x && point.y < max().y;
     }
 
-    rect2 inflate(T d) const {
+    Rect2 inflate(T d) const {
         return {{pos.x - d, pos.y - d}, {size.x + d + d, size.y + d + d}};
     }
 
-    rect2 inflate(const vector2<T>& d) const {
+    Rect2 inflate(const Vector2<T>& d) const {
         return {{pos.x - d.x, pos.y - d.y}, {size.x + d.x + d.x, size.y + d.y + d.y}};
     }
 
-    rect2 translate(const vector2<T>& xy) const {
+    Rect2 translate(const Vector2<T>& xy) const {
         return {{pos + xy}, size};
     }
 
     template <typename U = T, typename = std::enable_if_t<std::is_floating_point_v<U>>>
-    rect2 half_round() const {
+    Rect2 half_round() const {
         return {
             {std::round(pos.x) + static_cast<T>(0.5), std::round(pos.y) + static_cast<T>(0.5)},
             {std::round(size.x), std::round(size.y)}};
     }
 
-    rect2 rect_union(const rect2& r) {
+    Rect2 rect_union(const Rect2& r) {
         return {glm::min(min(), r.min()), std::max(max(), r.max())};
     }
 };
 
-using rect2f32 = rect2<float32>;
-using vector2f32 = vector2<float32>;
-using vector2b = vector2<bool>;
+using Rect2_F32 = Rect2<float32>;
+using Vector2_F32 = Vector2<float32>;
+using Vector2_Bool = Vector2<bool>;
 
 template <typename T>
-struct math_consts final {
+struct Math_Consts final {
     static constexpr T pi_mul(T x) {
-        return math_consts::pi * x;
+        return Math_Consts::pi * x;
     }
 
     static constexpr T pi_div(T x) {
-        return math_consts::pi / x;
+        return Math_Consts::pi / x;
     }
 
     static constexpr T pi = static_cast<T>(3.1415926535897932384626433832795);
@@ -152,7 +152,7 @@ inline float32 lerp(float32 a, float32 b, float32 t) {
     return a * (1.f - t) + b * t;
 }
 
-struct none final {};
+struct None final {};
 
 inline uint32 str_distance(std::string_view a, std::string_view b) {
     // levenshtein
@@ -187,23 +187,68 @@ inline void hash_combine(std::size_t& seed) {
 }
 
 template <typename T>
-struct hash_decay final {
+struct Hash_Decay final {
     using type = T;
 };
 
 template <>
-struct hash_decay<const char*> final {
+struct Hash_Decay<const char*> final {
     using type = std::string_view;
 };
 
 template <>
-struct hash_decay<char*> final {
+struct Hash_Decay<char*> final {
     using type = std::string_view;
 };
 
+struct Pre_Hash final {
+    uint64 hash;
+};
+
+inline constexpr uint32 fnv1a_32(const char* s, uint64 count) {
+    return count ? (fnv1a_32(s, count - 1) ^ s[count - 1]) * 16777619u : 2166136261u;
+}
+
+consteval Pre_Hash consthash(const std::string_view& str) {
+    return {static_cast<uint64>(fnv1a_32(str.data(), str.size()))};
+}
+
+namespace std {
+template <>
+struct hash<Pre_Hash> {
+    size_t operator()(const Pre_Hash& x) const {
+        return x.hash;
+    }
+};
+} // namespace std
+
+namespace robin_hood {
+template <>
+struct hash<Pre_Hash> {
+    size_t operator()(const Pre_Hash& x) const {
+        return x.hash;
+    }
+};
+} // namespace robin_hood
+
 template <typename T, typename... Rest>
 void hash_combine(std::size_t& seed, const T& v, const Rest&... rest) {
-    using hd_t = typename hash_decay<std::decay_t<T>>::type;
+    using hd_t = typename Hash_Decay<std::decay_t<T>>::type;
     seed ^= robin_hood::hash<hd_t>{}(hd_t{v}) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
     (hash_combine(seed, rest), ...);
+}
+
+template <typename T>
+inline std::string to_string2(T&& x) {
+    return std::to_string(x);
+}
+
+inline std::string to_string2(const char* x) {
+    return std::string{x};
+}
+
+inline std::string to_string_cat(auto... arg) {
+    std::string s;
+    s = (to_string2(std::forward<decltype(arg)>(arg)) + ...);
+    return s;
 }

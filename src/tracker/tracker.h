@@ -6,7 +6,7 @@
 #include <vector>
 #include <string>
 
-class tracker final {
+class Tracker final {
   public:
     static constexpr uint32 SAMPLE_RATE = 48000;
     static constexpr uint32 FRAME_COUNT = 480;

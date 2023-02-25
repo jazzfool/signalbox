@@ -5,26 +5,26 @@ extern "C" {
 #endif
 
 #ifdef SB_USE_METAL
-struct context_mtl;
+struct Context_MTL;
 #endif
 
 struct GLFWwindow;
 struct NVGcontext;
 
-typedef struct context {
+typedef struct Context {
     struct GLFWwindow* window;
     struct NVGcontext* nvg;
 #ifdef SB_USE_METAL
     struct context_mtl* mtl;
 #endif
-} context;
+} Context;
 
-context create_context();
-void destroy_context(context* cx);
+Context create_context();
+void destroy_context(Context* cx);
 
-void context_begin_frame(context* cx, float r, float g, float b);
-void context_end_frame(context* cx);
-void context_on_resize(context* cx);
+void context_begin_frame(Context* cx, float r, float g, float b);
+void context_end_frame(Context* cx);
+void context_on_resize(Context* cx);
 
 #ifdef __cplusplus
 }

@@ -2,7 +2,7 @@
 
 #include "ui.h"
 
-void tracker::create() {
+void Tracker::create() {
     sb_ASSERT(ma_context_init(nullptr, 0, nullptr, &m_context) == MA_SUCCESS);
 
     ma_device_info* playback_devs = nullptr;
@@ -31,37 +31,40 @@ void tracker::create() {
     }
 }
 
-void tracker::destroy() {
+void Tracker::destroy() {
     ma_device_uninit(&m_device);
     ma_context_uninit(&m_context);
 }
 
-void tracker::ui() {
-    static std::vector<std::string> enums = {"Short Option", "Really Long Option"};
+void Tracker::ui() {
+    static std::vector<std::string_view> enums = {"Short Option", "Really Long Option"};
     static uint32 i = 0;
+    static std::string txt = "Hello!";
 
     using namespace ui;
-    vector2f32 sz;
+    Vector2_F32 sz;
     // clang-format off
-    vstack(spacing{10.f})
-        (text("Hello!")(nvgRGB(255, 0, 0)))
-        (hstack(spacing{5.f})
+    vstack(Spacing{10.f})
+        (hstack(Spacing{5.f})
             (text("Label")())
-            (button(text("Value")(), []{ printf("Click!"); })()))
+            (button(
+                text("Value")(),
+                onclick([]{ spdlog::info("click!"); }))()))
         (text("World!")())
         (dropdown(enums, i)())
         (dropdown(enums, i)())
+        (textbox(txt)())
         (sz)
         ({{0.f, 0.f}, {200.f, 200.f}});
     // clang-format on
 }
 
 void ma_data_callback(ma_device* device, void* output, const void* input, ma_uint32 frame_count) {
-    reinterpret_cast<tracker*>(device->pUserData)
+    reinterpret_cast<Tracker*>(device->pUserData)
         ->data_callback(output, input, static_cast<uint32>(frame_count));
 }
 
-void tracker::create_device() {
+void Tracker::create_device() {
     auto config = ma_device_config_init(ma_device_type_duplex);
 
     config.playback.format = ma_format_f32;
@@ -73,8 +76,8 @@ void tracker::create_device() {
     config.capture.pDeviceID = &m_capture_dev_ids[m_capture_dev_idx];
     config.capture.shareMode = ma_share_mode_shared;
 
-    config.sampleRate = tracker::SAMPLE_RATE;
-    config.periodSizeInFrames = tracker::FRAME_COUNT;
+    config.sampleRate = Tracker::SAMPLE_RATE;
+    config.periodSizeInFrames = Tracker::FRAME_COUNT;
     config.dataCallback = ma_data_callback;
     config.pUserData = this;
 
@@ -82,5 +85,5 @@ void tracker::create_device() {
     ma_device_start(&m_device);
 }
 
-void tracker::data_callback(void* output, const void* input, uint32 frame_count) {
+void Tracker::data_callback(void* output, const void* input, uint32 frame_count) {
 }

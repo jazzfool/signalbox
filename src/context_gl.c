@@ -9,8 +9,8 @@
 #define NANOVG_GL3_IMPLEMENTATION
 #include <nanovg_gl.h>
 
-context create_context() {
-    context cx;
+Context create_context() {
+    Context cx;
 
     glfwInit();
 
@@ -40,13 +40,13 @@ context create_context() {
     return cx;
 }
 
-void destroy_context(context* cx) {
+void destroy_context(Context* cx) {
     nvgDeleteGL3(cx->nvg);
     glfwDestroyWindow(cx->window);
     glfwTerminate();
 }
 
-void context_begin_frame(context* cx, float r, float g, float b) {
+void context_begin_frame(Context* cx, float r, float g, float b) {
     int fb_width, fb_height;
     glfwGetFramebufferSize(cx->window, &fb_width, &fb_height);
 
@@ -55,11 +55,11 @@ void context_begin_frame(context* cx, float r, float g, float b) {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 }
 
-void context_end_frame(context* cx) {
+void context_end_frame(Context* cx) {
     glfwSwapBuffers(cx->window);
 }
 
-void context_on_resize(context* cx) {
+void context_on_resize(Context* cx) {
 }
 
 #endif

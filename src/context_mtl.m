@@ -9,13 +9,13 @@
 #include <nanovg.h>
 #include <nanovg_mtl.h>
 
-struct context_mtl {
+struct Context_MTL {
 	id<MTLDevice> device;
 	CAMetalLayer* layer;
 };
 
 context create_context() {
-	context cx;
+	Context cx;
 
 	glfwInit();
 
@@ -23,7 +23,7 @@ context create_context() {
 
 	cx.window = glfwCreateWindow(400, 300, "Signalbox", NULL, NULL);
 
-	cx.mtl = calloc(1, sizeof(struct context_mtl));
+	cx.mtl = calloc(1, sizeof(struct Context_MTL));
 
 	NSWindow* nswin = glfwGetCocoaWindow(cx.window);
 	cx.mtl->device = MTLCreateSystemDefaultDevice();
@@ -40,7 +40,7 @@ context create_context() {
 	return cx;
 }
 
-void destroy_context(context* cx) {
+void destroy_context(Context* cx) {
 	free(cx->mtl);
 
 	nvgDeleteMTL(cx->nvg);
@@ -48,13 +48,13 @@ void destroy_context(context* cx) {
 	glfwTerminate();
 }
 
-void context_begin_frame(context* cx, float r, float g, float b) {
+void context_begin_frame(Context* cx, float r, float g, float b) {
 	mnvgClearWithColor(cx->nvg, nvgRGBf(r, g, b));
 }
 
-void context_end_frame(context* cx) {}
+void context_end_frame(Context* cx) {}
 
-void context_on_resize(context* cx) {
+void context_on_resize(Context* cx) {
 	int fb_width, fb_height;
     glfwGetFramebufferSize(cx->window, &fb_width, &fb_height);
 

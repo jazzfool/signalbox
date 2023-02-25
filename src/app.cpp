@@ -1,6 +1,9 @@
 #include "app.h"
 
+#include "ui.h"
+
 #include <nfd.hpp>
+#include <GLFW/glfw3.h>
 
 #ifdef __APPLE__
 #define SB_DPI_SCALE(X) 1.f
@@ -8,61 +11,60 @@
 #define SB_DPI_SCALE(X) X
 #endif
 
-app::app() : m_focus{ui_key::null()} {
+App::App()  {
     m_dpi_scale = 1.f;
-    m_ui_opts = ui_options::default_options();
-    m_ui_colors = ui_colors::dark();
 }
 
-app& app::create() {
+App& App::create() {
     m_cx = create_context();
 
     glfwSetWindowUserPointer(m_cx.window, this);
 
     glfwGetWindowContentScale(m_cx.window, &m_dpi_scale, nullptr);
     glfwSetWindowContentScaleCallback(m_cx.window, [](GLFWwindow* window, float32 xScale, float32 yScale) {
-        auto& b = *reinterpret_cast<app*>(glfwGetWindowUserPointer(window));
+        auto& b = *reinterpret_cast<App*>(glfwGetWindowUserPointer(window));
         b.m_dpi_scale = xScale;
     });
 
     glfwSetCursorPosCallback(m_cx.window, [](GLFWwindow* window, float64 x, float64 y) {
-        auto& b = *reinterpret_cast<app*>(glfwGetWindowUserPointer(window));
-        const auto pos = vector2<float32>{
+        auto& state = UI_State::get();
+        auto& b = *reinterpret_cast<App*>(glfwGetWindowUserPointer(window));
+        const auto pos = Vector2<float32>{
             static_cast<float32>(x) / SB_DPI_SCALE(b.m_dpi_scale),
             static_cast<float32>(y) / SB_DPI_SCALE(b.m_dpi_scale)};
-        b.m_input.cursor_delta = pos - b.m_input.cursor_pos;
-        b.m_input.cursor_pos = pos;
+        state.input.cursor_delta = pos - state.input.cursor_pos;
+        state.input.cursor_pos = pos;
     });
 
     glfwSetMouseButtonCallback(m_cx.window, [](GLFWwindow* window, int32 button, int32 action, int32 mods) {
-        auto& b = *reinterpret_cast<app*>(glfwGetWindowUserPointer(window));
+        auto& state = UI_State::get();
         if (action == GLFW_PRESS) {
-            b.m_input.mouse_just_pressed[button] = true;
-            b.m_input.mouse_is_pressed[button] = true;
+            state.input.mouse_just_pressed[button] = true;
+            state.input.mouse_is_pressed[button] = true;
         } else if (action == GLFW_RELEASE) {
-            b.m_input.mouse_just_released[button] = true;
-            b.m_input.mouse_is_pressed[button] = false;
+            state.input.mouse_just_released[button] = true;
+            state.input.mouse_is_pressed[button] = false;
         }
     });
 
     glfwSetScrollCallback(m_cx.window, [](GLFWwindow* window, float64 xScroll, float64 yScroll) {
-        auto& b = *reinterpret_cast<app*>(glfwGetWindowUserPointer(window));
-        b.m_input.scroll_wheel = static_cast<float32>(yScroll);
+        auto& state = UI_State::get();
+        state.input.scroll_wheel = static_cast<float32>(yScroll);
     });
 
     glfwSetCharCallback(m_cx.window, [](GLFWwindow* window, uint32 text) {
-        auto& b = *reinterpret_cast<app*>(glfwGetWindowUserPointer(window));
-        b.m_input.text = static_cast<char32>(text);
+        auto& state = UI_State::get();
+        state.input.text = static_cast<char32>(text);
     });
 
     glfwSetKeyCallback(
         m_cx.window, [](GLFWwindow* window, int32 key, int32 scancode, int32 action, int32 mods) {
-            auto& b = *reinterpret_cast<app*>(glfwGetWindowUserPointer(window));
+            auto& state = UI_State::get();
             if (action == GLFW_PRESS || action == GLFW_REPEAT) {
-                b.m_input.keys_just_pressed[key] = true;
-                b.m_input.key_is_pressed[key] = true;
+                state.input.keys_just_pressed[key] = true;
+                state.input.key_is_pressed[key] = true;
             } else if (action == GLFW_RELEASE) {
-                b.m_input.key_is_pressed[key] = false;
+                state.input.key_is_pressed[key] = false;
             }
         });
 
@@ -70,7 +72,7 @@ app& app::create() {
         auto p = glfwGetWindowUserPointer(window);
         if (!p)
             return;
-        auto& b = *reinterpret_cast<app*>(p);
+        auto& b = *reinterpret_cast<App*>(p);
         context_on_resize(&b.m_cx);
         b.draw_frame();
     });
@@ -93,17 +95,19 @@ app& app::create() {
     nvgAddFallbackFont(m_cx.nvg, "sans", "symbols2");
     nvgAddFallbackFont(m_cx.nvg, "sans", "emoji");
 
+    m_draw.emplace(m_cx.nvg);
+
     m_tracker.create();
 
     return *this;
 }
 
-void app::destroy() {
+void App::destroy() {
     m_tracker.destroy();
     destroy_context(&m_cx);
 }
 
-app& app::run_loop() {
+App& App::run_loop() {
     while (!glfwWindowShouldClose(m_cx.window)) {
         draw_frame();
         glfwPollEvents();
@@ -112,48 +116,33 @@ app& app::run_loop() {
     return *this;
 }
 
-void app::ui() {
+void App::ui() {
     m_tracker.ui();
 }
 
-void app::draw_frame() {
+void App::draw_frame() {
+    auto& state = UI_State::get();
+
     int32 width, height;
     glfwGetWindowSize(m_cx.window, &width, &height);
 
     int32 fb_width, fb_height;
     glfwGetFramebufferSize(m_cx.window, &fb_width, &fb_height);
 
-    const auto clear_color = m_ui_colors.window_bg;
+    const auto clear_color = state.colors.window_bg;
     context_begin_frame(&m_cx, clear_color.r, clear_color.g, clear_color.b);
 
     nvgBeginFrame(m_cx.nvg, width, height, m_dpi_scale);
     nvgScale(m_cx.nvg, SB_DPI_SCALE(m_dpi_scale), SB_DPI_SCALE(m_dpi_scale));
 
-    m_input.begin_frame();
-    m_memory.begin_frame();
+    m_draw->reset();
 
-    draw_list draw{m_cx.nvg};
-
-    auto& state = ui_state::get();
-    state.draw = &draw;
-    state.input = &m_input;
-    state.memory = &m_memory;
-    state.focus = &m_focus;
-    state.opts = &m_ui_opts;
-    state.colors = &m_ui_colors;
-    state.focus_taken = false;
+    state.begin_frame(*m_draw);
 
     ui();
 
-    if (!ui_state::get().focus_taken && m_input.mouse_just_pressed[0]) {
-        m_focus = ui_key::null();
-    }
-
-    draw.execute();
-
-    m_input.end_frame();
-
-    state.draw = nullptr;
+    state.end_frame();
+    m_draw->execute();
 
     nvgEndFrame(m_cx.nvg);
     context_end_frame(&m_cx);
