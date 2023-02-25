@@ -41,7 +41,7 @@ void UI_Memory::begin_frame() {
     if (m_linear) {
         const auto allocated = m_linear->report_allocated();
         alloc_resize = allocated > m_max_linear;
-        m_max_linear = std::max(m_max_linear, allocated);
+        m_max_linear = std::max(m_max_linear, (uint64)allocated);
     } else {
         alloc_resize = true;
         m_max_linear = 8192;

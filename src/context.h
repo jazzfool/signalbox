@@ -15,7 +15,7 @@ typedef struct Context {
     struct GLFWwindow* window;
     struct NVGcontext* nvg;
 #ifdef SB_USE_METAL
-    struct context_mtl* mtl;
+    struct Context_MTL* mtl;
 #endif
 } Context;
 
