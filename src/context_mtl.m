@@ -14,7 +14,7 @@ struct Context_MTL {
 	CAMetalLayer* layer;
 };
 
-context create_context() {
+Context create_context() {
 	Context cx;
 
 	glfwInit();
