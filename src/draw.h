@@ -5,6 +5,7 @@
 #include <string_view>
 #include <nanovg.h>
 #include <variant>
+#include <deque>
 
 enum class Draw_Font { Mono, Mono_Bold, Sans, Sans_Bold, _Max };
 
@@ -16,12 +17,20 @@ struct Draw_List final {
 
     Draw_List(NVGcontext* nvg);
 
-    void reset();
+    void reset(uint32 width, uint32 height);
 
     void execute();
 
     void push_layer();
     void pop_layer();
+
+    void push_clip_rect(const Rect2_F32& rect);
+    void pop_clip_rect();
+    Rect2_F32 clip_rect() const;
+
+    void fill_rect(const Rect2_F32& rect, NVGcolor color);
+    void stroke_rect(const Rect2_F32& rect, NVGcolor color, float32 stroke_width);
+    void tb_grad_fill_rect(const Rect2_F32& rect, NVGcolor from, NVGcolor to);
 
     void fill_rrect(const Rect2_F32& rect, float32 radius, NVGcolor color);
     void stroke_rrect(const Rect2_F32& rect, float32 radius, NVGcolor color, float32 stroke_width);
@@ -53,6 +62,11 @@ struct Draw_List final {
         void apply(NVGcontext* nvg, const Rect2_F32& rect) const;
     };
 
+    struct Cmd_Rect final {
+        Rect2_F32 rect;
+        Cmd_Paint paint;
+    };
+
     struct Cmd_RRect final {
         Rect2_F32 rect;
         float32 radius = 0.f;
@@ -80,14 +94,23 @@ struct Draw_List final {
         float32 size = 0.f;
     };
 
-    struct Command final {
-        enum { rrect, circle, line, text } type;
-        std::variant<Cmd_RRect, Cmd_Circle, Cmd_Line, Cmd_Text> cmd;
+    struct Cmd_Clip final {
+        enum { Push, Pop } mode = Push;
+        Rect2_F32 rect;
+    };
+
+    using Command = std::variant<Cmd_Rect, Cmd_RRect, Cmd_Circle, Cmd_Line, Cmd_Text, Cmd_Clip>;
+
+    struct Layer {
+        std::vector<Command> cmds;
+        std::deque<Rect2_F32> clip_stack;
     };
 
     NVGcontext* m_nvg;
     uint8 m_layer = 0;
-    std::array<std::vector<Command>, MAX_LAYERS> m_list;
+    uint32 m_width = 0;
+    uint32 m_height = 0;
+    std::array<Layer, MAX_LAYERS> m_list;
 };
 
 NVGcolor blend_color(NVGcolor a, NVGcolor b, float32 t);

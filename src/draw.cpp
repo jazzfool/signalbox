@@ -1,6 +1,8 @@
 #include "draw.h"
 
 #include <nanovg.h>
+#include <stack>
+#include <spdlog/spdlog.h>
 
 const char* get_font_name(Draw_Font font) {
     static const char* font_names[(size_t)Draw_Font::_Max] = {"mono", "monoB", "sans", "sansB"};
@@ -25,64 +27,60 @@ NVGcolor blend_color(NVGcolor a, NVGcolor b, float32 t) {
 Draw_List::Draw_List(NVGcontext* nvg) : m_nvg{nvg} {
 }
 
-void Draw_List::reset() {
+void Draw_List::reset(uint32 width, uint32 height) {
     m_layer = 0;
+    m_width = width;
+    m_height = height;
     for (auto& layer : m_list) {
-        layer.clear();
+        layer.cmds.clear();
+        layer.clip_stack.clear();
+        layer.clip_stack.push_back(Rect2_F32{{0.f, 0.f}, {(float32)width, (float32)height}});
     }
 }
 
 void Draw_List::execute() {
+    auto draw_visitor = Lambda_Overloads{
+        [&](const Cmd_Rect& cmd) {
+            nvgBeginPath(m_nvg);
+            nvgRect(m_nvg, NVG_RECT_ARGS(cmd.rect));
+            cmd.paint.apply(m_nvg, cmd.rect);
+        },
+        [&](const Cmd_RRect& cmd) {
+            nvgBeginPath(m_nvg);
+            nvgRoundedRect(m_nvg, NVG_RECT_ARGS(cmd.rect), cmd.radius);
+            cmd.paint.apply(m_nvg, cmd.rect);
+        },
+        [&](const Cmd_Circle& cmd) {
+            nvgBeginPath(m_nvg);
+            nvgCircle(m_nvg, cmd.center.x, cmd.center.y, cmd.radius);
+            cmd.paint.apply(
+                m_nvg, {cmd.center - Vector2_F32{cmd.radius, cmd.radius},
+                        2.f * Vector2_F32{cmd.radius, cmd.radius}});
+        },
+        [&](const Cmd_Line& cmd) {
+            nvgBeginPath(m_nvg);
+            nvgMoveTo(m_nvg, cmd.p0.x, cmd.p0.y);
+            nvgLineTo(m_nvg, cmd.p1.x, cmd.p1.y);
+            cmd.paint.apply(m_nvg, Rect2_F32::from_point_fit(cmd.p0, cmd.p1));
+        },
+        [&](const Cmd_Text& cmd) {
+            nvgFontFace(m_nvg, get_font_name(cmd.font));
+            nvgFontSize(m_nvg, cmd.size);
+            nvgFillColor(m_nvg, cmd.color);
+            nvgTextAlign(m_nvg, get_text_align(cmd.align));
+            float32 ascender = 0.f;
+            nvgTextMetrics(m_nvg, &ascender, nullptr, nullptr);
+            nvgText(m_nvg, cmd.pos.x, cmd.pos.y + ascender / 2.f, cmd.text.c_str(), nullptr);
+        },
+        [&](const Cmd_Clip& cmd) { nvgScissor(m_nvg, NVG_RECT_ARGS(cmd.rect)); },
+    };
+
     for (const auto& layer : m_list) {
-        for (const auto& cmd : layer) {
-            switch (cmd.type) {
-            case Command::rrect: {
-                const auto& cmdrrect = std::get<Cmd_RRect>(cmd.cmd);
-
-                nvgBeginPath(m_nvg);
-                nvgRoundedRect(m_nvg, NVG_RECT_ARGS(cmdrrect.rect), cmdrrect.radius);
-                cmdrrect.paint.apply(m_nvg, cmdrrect.rect);
-
-                break;
-            }
-            case Command::circle: {
-                const auto& cmdcircle = std::get<Cmd_Circle>(cmd.cmd);
-
-                nvgBeginPath(m_nvg);
-                nvgCircle(m_nvg, cmdcircle.center.x, cmdcircle.center.y, cmdcircle.radius);
-                cmdcircle.paint.apply(
-                    m_nvg, {cmdcircle.center - Vector2_F32{cmdcircle.radius, cmdcircle.radius},
-                            2.f * Vector2_F32{cmdcircle.radius, cmdcircle.radius}});
-
-                break;
-            }
-            case Command::line: {
-                const auto& cmdline = std::get<Cmd_Line>(cmd.cmd);
-
-                nvgBeginPath(m_nvg);
-                nvgMoveTo(m_nvg, cmdline.p0.x, cmdline.p0.y);
-                nvgLineTo(m_nvg, cmdline.p1.x, cmdline.p1.y);
-                cmdline.paint.apply(m_nvg, Rect2_F32::from_point_fit(cmdline.p0, cmdline.p1));
-
-                break;
-            }
-            case Command::text: {
-                const auto& cmdtext = std::get<Cmd_Text>(cmd.cmd);
-
-                nvgFontFace(m_nvg, get_font_name(cmdtext.font));
-                nvgFontSize(m_nvg, cmdtext.size);
-                nvgFillColor(m_nvg, cmdtext.color);
-                nvgTextAlign(m_nvg, get_text_align(cmdtext.align));
-                float32 ascender = 0.f;
-                nvgTextMetrics(m_nvg, &ascender, nullptr, nullptr);
-                nvgText(m_nvg, cmdtext.pos.x, cmdtext.pos.y + ascender / 2.f, cmdtext.text.c_str(), nullptr);
-
-                break;
-            }
-            default:
-                break;
-            }
+        nvgSave(m_nvg);
+        for (const auto& cmd : layer.cmds) {
+            std::visit(draw_visitor, cmd);
         }
+        nvgRestore(m_nvg);
     }
 }
 
@@ -96,17 +94,70 @@ void Draw_List::pop_layer() {
         --m_layer;
 }
 
+void Draw_List::push_clip_rect(const Rect2_F32& rect) {
+    auto& layer = m_list[m_layer];
+
+    layer.clip_stack.push_back(layer.clip_stack.back().rect_intersect(rect));
+
+    Cmd_Clip clip;
+    clip.rect = layer.clip_stack.back();
+
+    layer.cmds.emplace_back(clip);
+}
+
+void Draw_List::pop_clip_rect() {
+    auto& layer = m_list[m_layer];
+
+    if (layer.clip_stack.size() < 2) {
+        spdlog::error("clip pop with no push");
+        return;
+    }
+
+    layer.clip_stack.pop_back();
+
+    Cmd_Clip clip;
+    clip.rect = layer.clip_stack.back();
+
+    layer.cmds.emplace_back(clip);
+}
+
+Rect2_F32 Draw_List::clip_rect() const {
+    return m_list[m_layer].clip_stack.back();
+}
+
+void Draw_List::fill_rect(const Rect2_F32& rect, NVGcolor color) {
+    Cmd_Rect cmdrect;
+    cmdrect.rect = rect;
+    cmdrect.paint.color = color;
+
+    m_list[m_layer].cmds.emplace_back(cmdrect);
+}
+
+void Draw_List::stroke_rect(const Rect2_F32& rect, NVGcolor color, float32 stroke_width) {
+    Cmd_Rect cmdrect;
+    cmdrect.rect = rect;
+    cmdrect.paint.color = color;
+
+    m_list[m_layer].cmds.emplace_back(cmdrect);
+}
+
+void Draw_List::tb_grad_fill_rect(const Rect2_F32& rect, NVGcolor from, NVGcolor to) {
+    Cmd_Rect cmdrect;
+    cmdrect.rect = rect;
+    cmdrect.paint.gradient = true;
+    cmdrect.paint.gradient_from = from;
+    cmdrect.paint.gradient_to = to;
+
+    m_list[m_layer].cmds.emplace_back(cmdrect);
+}
+
 void Draw_List::fill_rrect(const Rect2_F32& rect, float32 radius, NVGcolor color) {
     Cmd_RRect rrect;
     rrect.rect = rect;
     rrect.radius = radius;
     rrect.paint.color = color;
 
-    Command cmd;
-    cmd.type = Command::rrect;
-    cmd.cmd = rrect;
-
-    m_list[m_layer].push_back(cmd);
+    m_list[m_layer].cmds.emplace_back(rrect);
 }
 
 void Draw_List::stroke_rrect(const Rect2_F32& rect, float32 radius, NVGcolor color, float32 stroke_width) {
@@ -117,11 +168,7 @@ void Draw_List::stroke_rrect(const Rect2_F32& rect, float32 radius, NVGcolor col
     rrect.paint.width = stroke_width;
     rrect.paint.color = color;
 
-    Command cmd;
-    cmd.type = Command::rrect;
-    cmd.cmd = rrect;
-
-    m_list[m_layer].push_back(cmd);
+    m_list[m_layer].cmds.emplace_back(rrect);
 }
 
 void Draw_List::tb_grad_fill_rrect(const Rect2_F32& rect, float32 radius, NVGcolor from, NVGcolor to) {
@@ -132,11 +179,7 @@ void Draw_List::tb_grad_fill_rrect(const Rect2_F32& rect, float32 radius, NVGcol
     cmdrrect.paint.gradient_from = from;
     cmdrrect.paint.gradient_to = to;
 
-    Command cmd;
-    cmd.type = Command::rrect;
-    cmd.cmd = cmdrrect;
-
-    m_list[m_layer].push_back(cmd);
+    m_list[m_layer].cmds.emplace_back(cmdrrect);
 }
 
 void Draw_List::fill_circle(Vector2_F32 center, float32 radius, NVGcolor color) {
@@ -145,11 +188,7 @@ void Draw_List::fill_circle(Vector2_F32 center, float32 radius, NVGcolor color) 
     cmdcircle.radius = radius;
     cmdcircle.paint.color = color;
 
-    Command cmd;
-    cmd.type = Command::circle;
-    cmd.cmd = cmdcircle;
-
-    m_list[m_layer].push_back(cmd);
+    m_list[m_layer].cmds.emplace_back(cmdcircle);
 }
 
 void Draw_List::tb_grad_fill_circle(Vector2_F32 center, float32 radius, NVGcolor from, NVGcolor to) {
@@ -160,11 +199,7 @@ void Draw_List::tb_grad_fill_circle(Vector2_F32 center, float32 radius, NVGcolor
     cmdcircle.paint.gradient_from = from;
     cmdcircle.paint.gradient_to = to;
 
-    Command cmd;
-    cmd.type = Command::circle;
-    cmd.cmd = cmdcircle;
-
-    m_list[m_layer].push_back(cmd);
+    m_list[m_layer].cmds.emplace_back(cmdcircle);
 }
 
 void Draw_List::stroke_line(Vector2_F32 p0, Vector2_F32 p1, NVGcolor color, float32 stroke_width) {
@@ -175,11 +210,7 @@ void Draw_List::stroke_line(Vector2_F32 p0, Vector2_F32 p1, NVGcolor color, floa
     cmdline.paint.width = stroke_width;
     cmdline.paint.color = color;
 
-    Command cmd;
-    cmd.type = Command::line;
-    cmd.cmd = cmdline;
-
-    m_list[m_layer].push_back(cmd);
+    m_list[m_layer].cmds.emplace_back(cmdline);
 }
 
 Vector2_F32
@@ -213,15 +244,11 @@ void Draw_List::text(
     cmdtext.pos = pos;
     cmdtext.align = align;
     cmdtext.color = color;
-    cmdtext.text = text;
+    cmdtext.text = std::string{text};
     cmdtext.font = font;
     cmdtext.size = size;
 
-    Command cmd;
-    cmd.type = Command::text;
-    cmd.cmd = cmdtext;
-
-    m_list[m_layer].push_back(cmd);
+    m_list[m_layer].cmds.emplace_back(cmdtext);
 }
 
 void Draw_List::Cmd_Paint::apply(NVGcontext* nvg, const Rect2_F32& rect) const {

@@ -104,7 +104,11 @@ struct Rect2 {
     }
 
     Rect2 rect_union(const Rect2& r) {
-        return {glm::min(min(), r.min()), std::max(max(), r.max())};
+        return Rect2::from_min_max(glm::min(min(), r.min()), std::max(max(), r.max()));
+    }
+
+    Rect2 rect_intersect(const Rect2& r) {
+        return Rect2::from_min_max(glm::max(min(), r.min()), glm::min(max(), r.max()));
     }
 };
 
@@ -182,6 +186,14 @@ inline uint64 rdbytesu64le(const uint8* p) {
     return (uint64)p[7] << 56 | (uint64)p[6] << 48 | (uint64)p[5] << 40 | (uint64)p[4] << 32 |
            (uint64)p[3] << 24 | (uint64)p[2] << 16 | (uint64)p[1] << 8 | (uint64)p[0];
 }
+
+template <typename... Ts>
+struct Lambda_Overloads final : Ts... {
+    using Ts::operator()...;
+};
+
+template <typename... Ts>
+Lambda_Overloads(Ts...) -> Lambda_Overloads<Ts...>;
 
 inline void hash_combine(std::size_t& seed) {
 }

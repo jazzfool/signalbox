@@ -37,22 +37,10 @@ void UI_Memory::begin_frame() {
     m_key_stack.emplace_back(UI_Key::root(), 0);
     m_next_ikey = 0;
 
-    auto alloc_resize = false;
-    if (m_linear) {
-        const auto allocated = m_linear->report_allocated();
-        alloc_resize = allocated > m_max_linear;
-        m_max_linear = std::max(m_max_linear, allocated);
-    } else {
-        alloc_resize = true;
-        m_max_linear = 8192;
-    }
+    m_mbr.release();
 
-    if (alloc_resize) {
-        spdlog::info("+uimem {}B", m_max_linear);
-        m_linear.emplace(m_max_linear);
-    }
-
-    m_linear->deallocate();
+    m_scratch_idx = (m_scratch_idx + 1) % 2;
+    m_scratch_mbr[m_scratch_idx].release();
 }
 
 void UI_Memory::push_existing_key(UI_Key key) {
@@ -119,8 +107,4 @@ void ui_push_existing_key(UI_Key key) {
 
 void ui_pop_key() {
     return UI_State::get().memory.pop_key();
-}
-
-Linear_String ui_linear_str(const char* s) {
-    return Linear_String{s, ui_linear_alloc<uint8>()};
 }

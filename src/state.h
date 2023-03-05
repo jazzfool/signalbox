@@ -15,6 +15,7 @@ struct UI_Options final {
     float32 border_width;
     Vector2_F32 text_pad;
     float32 panel_pad;
+    float32 scroll_bar_width;
 
     static UI_Options default_options() {
         return UI_Options{
@@ -23,6 +24,7 @@ struct UI_Options final {
             .border_width = 1.f,
             .text_pad = {6.f, 3.f},
             .panel_pad = 5.f,
+            .scroll_bar_width = 5.f,
         };
     }
 };
@@ -54,6 +56,10 @@ struct UI_Colors final {
     NVGcolor dial_border_to;
     NVGcolor dial_tick;
 
+    NVGcolor scroll_bar_bg;
+    NVGcolor scroll_bar_fg;
+    NVGcolor scroll_bar_press_fg;
+
     static UI_Colors dark() {
         return UI_Colors{
             .window_bg = nvgRGB(40, 40, 40),
@@ -81,6 +87,10 @@ struct UI_Colors final {
             .dial_border_from = nvgRGB(120, 120, 120),
             .dial_border_to = nvgRGB(50, 50, 50),
             .dial_tick = nvgRGB(120, 120, 120),
+
+            .scroll_bar_bg = nvgRGB(20, 20, 20),
+            .scroll_bar_fg = nvgRGB(70, 70, 70),
+            .scroll_bar_press_fg = nvgRGB(90, 90, 90),
         };
     }
 };

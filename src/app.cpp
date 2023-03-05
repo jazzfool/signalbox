@@ -110,7 +110,7 @@ void App::destroy() {
 App& App::run_loop() {
     while (!glfwWindowShouldClose(m_cx.window)) {
         draw_frame();
-        glfwPollEvents();
+        glfwWaitEvents();
     }
 
     return *this;
@@ -135,7 +135,7 @@ void App::draw_frame() {
     nvgBeginFrame(m_cx.nvg, width, height, m_dpi_scale);
     nvgScale(m_cx.nvg, SB_DPI_SCALE(m_dpi_scale), SB_DPI_SCALE(m_dpi_scale));
 
-    m_draw->reset();
+    m_draw->reset(width, height);
 
     state.begin_frame(*m_draw);
 

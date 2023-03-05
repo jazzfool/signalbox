@@ -30,7 +30,7 @@ Context create_context() {
     cx.window = glfwCreateWindow(400, 300, "Signalbox", NULL, NULL);
 
     glfwMakeContextCurrent(cx.window);
-    glfwSwapInterval(0);
+    glfwSwapInterval(1);
 
     glewExperimental = GL_TRUE;
     glewInit();

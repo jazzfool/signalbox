@@ -43,20 +43,22 @@ void Tracker::ui() {
 
     using namespace ui;
     Vector2_F32 sz;
-    // clang-format off
-    vstack(Spacing{10.f})
-        (hstack(Spacing{5.f})
-            (text("Label")())
-            (button(
-                text("Value")(),
-                onclick([]{ spdlog::info("click!"); }))()))
-        (text("World!")())
-        (dropdown(enums, i)())
-        (dropdown(enums, i)())
-        (textbox(txt)())
-        (sz)
-        ({{0.f, 0.f}, {200.f, 200.f}});
-    // clang-format on
+    constexpr static auto val = [](const std::string_view note) {
+        auto itr = interact()(mux())(text(Draw_Font::Mono)(note));
+        return [itr = std::move(itr)](Vector2_F32& sz) mutable {
+            auto ritr = std::move(itr)(sz);
+            return [ritr = std::move(ritr)](const Rect2_F32& r) mutable {
+                const auto itr = ritr(r);
+                if (itr.hover)
+                    UI_State::get().draw->fill_rect(r, nvgRGBA(255, 255, 255, 50));
+            };
+        };
+    };
+    auto vs = vstack();
+    for (uint32 i = 0; i < 64; ++i) {
+        vs(val("C-4"));
+    }
+    scroll_view(Scroll_Direction::Vertical)(vs)(sz)({{0.f, 0.f}, {200.f, 200.f}});
 }
 
 void ma_data_callback(ma_device* device, void* output, const void* input, ma_uint32 frame_count) {
